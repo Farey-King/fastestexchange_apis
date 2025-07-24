@@ -1,0 +1,49 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+
+# Django stuff
+*.log
+*.pot
+*.pyc
+*.pyo
+*.db
+*.sqlite3
+
+# VS Code settings (optional)
+.vscode/
+
+# macOS files (in case you share)
+.DS_Store
+
+# Windows files
+Thumbs.db
+
+# Env files
+.env
+.env.*
+
+# PyCharm / JetBrains IDE
+.idea/
+
+
+# Media files (if stored locally)
+media/
+
+# Static files (collected)
+staticfiles/
+
+# Coverage reports
+htmlcov/
+.coverage
+coverage.xml
+
+# mypy type checker
+.mypy_cache/
+
+# pytest
+.pytest_cache/
