@@ -1,0 +1,45 @@
+-i https://pypi.org/simple
+cryptography==43.0.3
+# Django core
+# django==5.2.4
+# python version
+# python==3.11.9
+# REST API framework
+djangorestframework==3.15.1
+djangorestframework-simplejwt==5.3.1
+django-filter==23.5
+
+# Environment variables
+django-environ==0.11.2
+
+# CORS headers
+django-cors-headers==4.7.0
+
+# Static files & production server
+whitenoise==6.6.0
+gunicorn==21.2.0
+
+# Database (PostgreSQL example)
+psycopg2-binary==2.9.10
+
+# Phone number field
+django-phonenumber-field[phonenumbers]==7.3.0
+
+# Boto3 for S3 storage
+boto3
+
+# Other common tools
+requests==2.31.0
+psycopg2-binary==2.9.10
+dj-database-url==2.1.0
+whitenoise==6.6.0
+django-storages==1.14.2
+# PDF rendering if needed
+# django-renderpdf==4.0.0
+django-model-utils==4.3.1
+# Optional: User agent parser
+user-agents==2.2.0
+ua-parser==0.18.0
+asyncio==3.4.3
+aiohttp==3.9.4rc0
+pyyaml==6.0.1
