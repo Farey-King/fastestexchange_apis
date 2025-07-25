@@ -1,0 +1,7 @@
+openapi: 3.0.3
+info:
+  title: Fastest Expense Tracker API
+  version: 1.0.0
+  description: API for Fastest Expense Tracker
+paths: {}
+components: {}
