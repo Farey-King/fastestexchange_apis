@@ -24,6 +24,10 @@ environ.Env.read_env(BASE_DIR / ".env")
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
+#  Update FRONTEND_URL
+FRONTEND_URL = env.bool("FRONTEND_URL", "http://localhost:5173")
+PASSWORD_RESET_BASE_URL = FRONTEND_URL + "/reset-password"
+
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-(aefx-qt*jnn8l(9f^%6uh3@cry_$vxjp1ow3+er*(#h^0&v81'

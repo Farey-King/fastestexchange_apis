@@ -20,8 +20,6 @@ import string
 
 
 from .models import (
-   
-    Transaction,
     TransactionHistory,
     User,
     Signup,

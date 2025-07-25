@@ -408,22 +408,22 @@ class Beneficiary(Person):
         return "Account: %s %s " % (self.owner.first_name, self.owner.last_name)
 
 
-class Client(Person):
-    """Client Account"""
+# class Client(Person):
+#     """Client Account"""
 
-    receive_price_update = models.BooleanField(default=False)
+#     receive_price_update = models.BooleanField(default=False)
 
-    def __str__(self):
-        return "%s %s" % (self.first_name, self.last_name)
+#     def __str__(self):
+#         return "%s %s" % (self.first_name, self.last_name)
 
-    class Meta:
-        indexes = [
-            models.Index(
-                fields=["receive_price_update"],
-                name="receive_price_update_idx",
-                condition=models.Q(receive_price_update=True),
-            ),
-        ]
+#     class Meta:
+#         indexes = [
+#             models.Index(
+#                 fields=["receive_price_update"],
+#                 name="receive_price_update_idx",
+#                 condition=models.Q(receive_price_update=True),
+#             ),
+#         ]
 
 
 class Currency(models.TextChoices):
@@ -477,45 +477,7 @@ class OperatingAccount(EditableModel):
         return "%s Operating Account - %s" % (self.office, self.Type(self.type).name)
 
 
-class Transaction(EditableModel):
-    class Type(models.IntegerChoices):
-        CREDIT = 1  # Add fund into the system account
-        DEBIT = 2  # Remove funds from the system account
 
-    class Status(models.IntegerChoices):
-        PENDING = 1
-        FULLFILLED = 2
-
-    type = models.IntegerField(choices=Type.choices)
-    amount = models.DecimalField(max_digits=20, decimal_places=8)
-    account = models.ForeignKey(
-        OperatingAccount, on_delete=models.PROTECT, related_name="transactions"
-    )
-    reference = models.ForeignKey(
-        "self", on_delete=models.CASCADE, blank=True, null=True
-    )
-    metadata = models.JSONField(null=False, default=dict)
-    client = models.ForeignKey(
-        ClientAccount, on_delete=models.PROTECT, blank=True, null=True
-    )
-    details = models.TextField(null=True, blank=True)
-    created_at = models.DateTimeField()
-    status = models.IntegerField(choices=Status.choices, blank=True, null=True)
-
-    def __str__(self) -> str:
-        return "TR(#%s): %.2f" % (self.id, self.amount)
-
-
-class Comment(EditableModel):
-    transaction = models.ForeignKey(
-        Transaction, related_name="comments", on_delete=models.CASCADE
-    )
-
-
-
-
-
-    text = models.TextField()
 
 
 # class ExchangeRate(EditableModel):

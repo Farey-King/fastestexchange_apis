@@ -8,7 +8,7 @@ from django.utils import timezone
 from fastest_exchange.messaging.notification import Messenger
 from fastest_exchange.middleware import get_current_request
 
-from .models import ClientAccount, Comment, Notification, Profile, User
+from .models import ClientAccount, Notification, Profile, User
 
 # Ignore list of items to check for within the signal
 IGNORE_SIGNAL_LIST = [
@@ -23,7 +23,7 @@ def format_user_email(user: User):
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):
     if created:
-        Profile.objects.create(user=instance)
+        Profile.objects.create(user=instance, country='UG')  # Default to Uganda
 
 
 @receiver(post_save, sender=User)
@@ -35,7 +35,7 @@ def create_user_notification(sender, instance, created, **kwargs):
 @receiver(post_save, sender=User)
 def create_user_client_account(sender, instance, created, **kwargs):
     if created:
-        ClientAccount.objects.create(user=instance)
+        ClientAccount.objects.create(owner=instance)
 
 
 # @receiver(pre_save, sender=User)
@@ -49,33 +49,33 @@ def create_user_client_account(sender, instance, created, **kwargs):
 #         Profile.objects.create(user=instance)
 
 
-@receiver(post_save, sender=Comment)
-def comment_added(sender, instance: Comment, created, **kwargs):
-    id = instance.transaction.id
-    comment_creator: User = instance.created_by
-    transaction_creator: User = instance.transaction.created_by
+# @receiver(post_save, sender=Comment)
+# def comment_added(sender, instance: Comment, created, **kwargs):
+#     id = instance.transaction.id
+#     comment_creator: User = instance.created_by
+#     transaction_creator: User = instance.transaction.created_by
 
-    recipient_list = []
+#     recipient_list = []
 
-    if transaction_creator != comment_creator:
-        recipient_list.append(transaction_creator)
+#     if transaction_creator != comment_creator:
+#         recipient_list.append(transaction_creator)
 
-    watchers = (
-        Comment.objects.filter(transaction_id=id).select_related("created_by").all()
-    )
-    seen = set()
-    creator_emails = [transaction_creator.email, comment_creator.email]
-    for x in watchers:
-        user: User = x.created_by
-        if user.email not in creator_emails and user.pk not in seen:
-            recipient_list.append(user)
-            seen.add(user.pk)
+#     watchers = (
+#         Comment.objects.filter(transaction_id=id).select_related("created_by").all()
+#     )
+#     seen = set()
+#     creator_emails = [transaction_creator.email, comment_creator.email]
+#     for x in watchers:
+#         user: User = x.created_by
+#         if user.email not in creator_emails and user.pk not in seen:
+#             recipient_list.append(user)
+#             seen.add(user.pk)
 
-    Messenger.send_mail(
-        f"{comment_creator.get_full_name()} added a comment to this TRANSACTION (#{id})",
-        instance.text,
-        [format_user_email(u) for u in recipient_list],
-    )
+#     Messenger.send_mail(
+#         f"{comment_creator.get_full_name()} added a comment to this TRANSACTION (#{id})",
+#         instance.text,
+#         [format_user_email(u) for u in recipient_list],
+#     )
 
 
 def user_login_success(sender, user: User, **kwargs):
