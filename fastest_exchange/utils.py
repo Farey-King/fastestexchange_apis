@@ -4,9 +4,12 @@ import requests
 import os
 
 
-TERMII_API_KEY = os.getenv('TL1pMOaRvnnSXEkTCcmd508MTg2GCVFoTR2NooVMtUqKl9qWnFl9duMHUgsF3i')  # or hardcode for testing (not recommended)
-TERMII_SENDER_ID = 'N-Alert'  # e.g. 'N-Alert' (must be approved by Termii)
-TERMII_BASE_URL = 'https://v3.api.termii.com'
+from django.conf import settings
+
+# Get Termii credentials from Django settings (which loads from environment variables)
+TERMII_API_KEY = settings.TERMII_API_KEY
+TERMII_SENDER_ID = settings.TERMII_SENDER_ID
+TERMII_BASE_URL = settings.TERMII_BASE_URL
 
 def format_phone_number(phone_number: str) -> str:
     """Format phone number to international format
@@ -54,9 +57,9 @@ def send_otp_to_phone(phone_number: str, otp_code: str):
     message = f"Your Fastest Exchange verification code is {otp_code}. This code expires in 5 minutes. Do not share this code with anyone."
     
     payload = {
-        "api_key": "TL1pMOaRvnnSXEkTCcmd508MTg2GCVFoTR2NooVMtUqKl9qWnFl9duMHUgsF3i",
+        "api_key": TERMII_API_KEY,
         "to": formatted_phone,
-        "from": "N-Alert",
+        "from": TERMII_SENDER_ID,
         "sms": message,
         "type": "plain",
         "channel": "generic",
