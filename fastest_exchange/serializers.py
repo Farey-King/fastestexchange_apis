@@ -32,6 +32,7 @@ from .models import (
     # Referral,
     ExchangeRate,
     Login,  # Import for Login model
+    PhoneNumber,  # Import for PhoneNumber model
 
     BankTransfer,
     MobileMoney,
@@ -45,8 +46,18 @@ from rest_framework import serializers
 class SignupSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
+#phone number serializer
+class PhoneNumberSerializer(serializers.Serializer):
+    phone_number = serializers.CharField(max_length=15, required=True)
+    otp_code = serializers.CharField(max_length=6, required=False, allow_blank=True)
+    otp_created_at = serializers.DateTimeField(required=False, allow_null=True)
 
-# serializers.py
+# OTP verification serializer
+class VerifyOtpSerializer(serializers.Serializer):
+    phone_number = serializers.CharField(max_length=15, required=True)
+    otp_code = serializers.CharField(max_length=6, required=True)
+    
+    
 
 
 # serializers.py

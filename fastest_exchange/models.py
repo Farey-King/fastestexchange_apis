@@ -30,6 +30,13 @@ class Signup(models.Model):
     def __str__(self):
         return self.email
     
+class PhoneNumber(models.Model):
+    phone_number = models.CharField(max_length=15, unique=True, null=True, blank=True)
+    phone_verified = models.BooleanField(default=False)
+    otp_code = models.CharField(max_length=6, null=True, blank=True)
+    otp_created_at = models.DateTimeField(null=True, blank=True)
+
+    
 class CreatePassword(models.Model):
     password = models.CharField(max_length=255)
     password_confirm = models.CharField(max_length=255)
@@ -103,6 +110,8 @@ class User(AbstractUser, PermissionsMixin):
     pin = models.CharField(max_length=255, blank=True, null=True)  # Store hashed PIN
     pin_attempts = models.IntegerField(default=0)
     pin_locked_until = models.DateTimeField(blank=True, null=True)
+    otp_code = models.CharField(max_length=6, blank=True, null=True)  # For SMS OTP
+    otp_created_at = models.DateTimeField(blank=True, null=True)  # OTP timestamp
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

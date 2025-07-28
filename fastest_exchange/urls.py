@@ -8,11 +8,13 @@ from rest_framework_simplejwt.views import (
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView,SpectacularRedocView
 
 from fastest_exchange.views import (
+                                    SendOtpView,
                                     SignupView,
                                     CreatePasswordView,
                                     CompleteSignupView,
                                     CreatePinView,
                                     LoginView,
+                                    VerifyOtpView,
                                    
                                    )
 app_name = "expense_tracker"
@@ -41,6 +43,8 @@ urlpatterns = [
     path("api/auth/token/refresh", TokenRefreshView.as_view(), name="token_refresh"),
     path("api/auth/token/verify", TokenVerifyView.as_view(), name="token_verify"),
     path("api/auth/token/blacklist", TokenBlacklistView.as_view(), name="token_blacklist"),
+    path('send-otp/', SendOtpView.as_view(), name='send-otp'),
+    path('verify-otp/', VerifyOtpView.as_view(), name='verify-otp'),
     # path("api/user", views.UserProfileView.as_view(), name="user"),
     
    

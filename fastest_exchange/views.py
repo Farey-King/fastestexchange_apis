@@ -54,9 +54,8 @@ from .models import (
     CompleteSignup,  # Added import for CompleteSignup
     CreatePassword,  # Added import for CreatePassword
     CreatePin,  # Added import for CreatePin
-   
     Login,  # Added import for Login
-   
+    PhoneNumber,  # Added import for PhoneNumber
 )
 
 from .serializers import (
@@ -73,6 +72,8 @@ from .serializers import (
     CreatePinSerializer,  # Added import for CreatePinSerializer
     LoginSerializer,  # Added import for LoginSerializer
     SignupSerializer,  # Added import for SignupSerialize
+    PhoneNumberSerializer,  # Added import for PhoneNumberSerializer
+    VerifyOtpSerializer,  # Added import for VerifyOtpSerializer
 )
 
 
@@ -147,6 +148,46 @@ Your fastest.exchange Team
             status=status.HTTP_201_CREATED
         )
 
+class SendOtpView(APIView):
+    def post(self, request):
+        serializer = PhoneNumberSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        phone_number = serializer.validated_data['phone_number']
+
+        user, created = User.objects.get_or_create(phone_number=phone_number, defaults={'username': phone_number})
+
+        otp = str(random.randint(100000, 999999))
+        user.otp_code = otp
+        user.otp_created_at = timezone.now()
+        user.save()
+
+        print(f"[DEBUG] OTP for {phone_number} is {otp}")
+
+        return Response({"detail": f"OTP sent to {phone_number}."})
+
+class VerifyOtpView(APIView):
+    def post(self, request):
+        serializer = VerifyOtpSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        phone_number = serializer.validated_data['phone_number']
+        otp_code = serializer.validated_data['otp_code']
+
+        try:
+            user = User.objects.get(phone_number=phone_number)
+        except User.DoesNotExist:
+            return Response({"detail": "Phone number not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        now = timezone.now()
+        if user.otp_code != otp_code:
+            return Response({"detail": "Invalid OTP."}, status=status.HTTP_400_BAD_REQUEST)
+        if user.otp_created_at and (now - user.otp_created_at).total_seconds() > 300:
+            return Response({"detail": "OTP expired."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.is_phone_verified = True
+        user.otp_code = None
+        user.save()
+
+        return Response({"detail": "Phone number verified!"})
 
 
 # views.py
@@ -282,7 +323,6 @@ class LoginView(APIView):
         return Response({
             "refresh": str(refresh),
             "access": str(refresh.access_token),
-            "email": user.email,
             "message": "Login successful."
         }, status=status.HTTP_200_OK)
 
