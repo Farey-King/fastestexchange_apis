@@ -2,7 +2,7 @@ from django.db import models
 import os
 from random import choice
 from turtle import mode
-
+import datetime
 from django.contrib.auth.models import AbstractUser, PermissionsMixin,BaseUserManager
 from django.contrib.auth.hashers import make_password, check_password
 
@@ -32,9 +32,20 @@ class Signup(models.Model):
     
 class PhoneNumber(models.Model):
     phone_number = models.CharField(max_length=15, unique=True, null=True, blank=True)
-    phone_verified = models.BooleanField(default=False)
     otp_code = models.CharField(max_length=6, null=True, blank=True)
     otp_created_at = models.DateTimeField(null=True, blank=True)
+    is_verified = models.BooleanField(default=False)
+    termii_message_id = models.CharField(max_length=100, null=True, blank=True)  # Optional: if Termii provides one
+    attempts = models.IntegerField(default=0)  # 
+
+    
+    def is_expired(self):
+        if self.otp_created_at is None:
+            return True  # Consider it expired if no timestamp exists
+        return timezone.now() > self.otp_created_at + datetime.timedelta(minutes=5)
+
+    def __str__(self):
+        return f"{self.phone_number} - {self.otp_code} - {self.otp_created_at}"
 
     
 class CreatePassword(models.Model):

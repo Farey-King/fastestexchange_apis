@@ -47,15 +47,46 @@ class SignupSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
 #phone number serializer
-class PhoneNumberSerializer(serializers.Serializer):
-    phone_number = serializers.CharField(max_length=15, required=True)
-    otp_code = serializers.CharField(max_length=6, required=False, allow_blank=True)
-    otp_created_at = serializers.DateTimeField(required=False, allow_null=True)
+from .utils import generate_otp
 
+class SendOTPSerializer(serializers.Serializer):
+    phone_number = serializers.CharField(max_length=15)
+
+    def validate(self, data):
+        phone = data.get("phone_number")
+        otp = generate_otp()
+
+        obj, _ = PhoneNumber.objects.update_or_create(
+            phone_number=phone,
+            defaults={'otp_code': otp, 'otp_created_at': timezone.now()}
+        )
+
+        # TODO: Integrate your SMS provider here
+        print(f"[DEBUG] Generated and stored OTP {otp} for {phone}")
+        
+        # Store OTP in data for further processing
+        data['generated_otp'] = otp
+        return data
 # OTP verification serializer
-class VerifyOtpSerializer(serializers.Serializer):
-    phone_number = serializers.CharField(max_length=15, required=True)
-    otp_code = serializers.CharField(max_length=6, required=True)
+class VerifyOTPSerializer(serializers.Serializer):
+    phone_number = serializers.CharField(max_length=15)
+    otp = serializers.CharField(max_length=6)
+
+    def validate(self, data):
+        phone = data['phone_number']
+        otp = data['otp']
+
+        try:
+            record = PhoneNumber.objects.get(phone_number=phone, otp_code=otp)
+            if record.is_expired():
+                raise serializers.ValidationError("OTP has expired.")
+            record.is_verified = True
+            record.save()
+        except PhoneNumber.DoesNotExist:
+            raise serializers.ValidationError("Invalid OTP or phone number.")
+
+        return data
+
     
     
 

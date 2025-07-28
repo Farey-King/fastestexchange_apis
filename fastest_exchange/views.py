@@ -15,6 +15,7 @@ from django.http import FileResponse
 
 # To bypass having a CSRF token
 # from django_renderpdf.views import PDFView  # Removed due to unresolved import
+import requests
 from rest_framework import generics, permissions, status
 from rest_framework.authtoken.models import Token 
 from rest_framework.authtoken.views import ObtainAuthToken 
@@ -33,6 +34,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator 
 from django.conf import settings 
 from django.urls import reverse 
+from .utils import send_otp_to_phone
 
 
 from drf_spectacular.utils import extend_schema
@@ -71,9 +73,9 @@ from .serializers import (
     CompleteSignupSerializer,  # Added import for CompleteProfileSerializer
     CreatePinSerializer,  # Added import for CreatePinSerializer
     LoginSerializer,  # Added import for LoginSerializer
-    SignupSerializer,  # Added import for SignupSerialize
-    PhoneNumberSerializer,  # Added import for PhoneNumberSerializer
-    VerifyOtpSerializer,  # Added import for VerifyOtpSerializer
+    SignupSerializer,  # Added import for SignupSerializer
+    SendOTPSerializer,  # Added import for SendOTPSerializer
+    VerifyOTPSerializer,  # Added import for VerifyOTPSerializer
 )
 
 
@@ -148,46 +150,67 @@ Your fastest.exchange Team
             status=status.HTTP_201_CREATED
         )
 
-class SendOtpView(APIView):
+@extend_schema(
+    request=SendOTPSerializer,
+    responses={200: None},
+    description="Send OTP to a phone number"
+)
+@method_decorator(csrf_exempt, name='dispatch')
+class SendOTPView(APIView):
+    permission_classes = [permissions.AllowAny]
+    
     def post(self, request):
-        serializer = PhoneNumberSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        phone_number = serializer.validated_data['phone_number']
-
-        user, created = User.objects.get_or_create(phone_number=phone_number, defaults={'username': phone_number})
-
-        otp = str(random.randint(100000, 999999))
-        user.otp_code = otp
-        user.otp_created_at = timezone.now()
-        user.save()
-
-        print(f"[DEBUG] OTP for {phone_number} is {otp}")
-
-        return Response({"detail": f"OTP sent to {phone_number}."})
-
-class VerifyOtpView(APIView):
+        print(f"[DEBUG] Request data: {request.data}")
+        serializer = SendOTPSerializer(data=request.data)
+        if serializer.is_valid():
+            phone = serializer.validated_data['phone_number']
+            generated_otp = serializer.validated_data['generated_otp']
+            print(f"[DEBUG] Phone number: {phone}")
+            print(f"[DEBUG] Generated OTP: {generated_otp}")
+            
+            # Send OTP via SMS using Termii API
+            result = send_otp_to_phone(phone, generated_otp)
+            
+            return Response(
+                {
+                    "message": "OTP sent successfully.",
+                    "phone_number": phone,
+                    "otp_generated": True
+                },
+                status=status.HTTP_200_OK
+            )
+        print(f"[DEBUG] Serializer errors: {serializer.errors}")
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+@extend_schema(
+    request=VerifyOTPSerializer,
+    responses={200: None},
+    description="Verify OTP for a phone number"
+)
+@method_decorator(csrf_exempt, name='dispatch')
+class VerifyOTPView(APIView):
+    permission_classes = [permissions.AllowAny]
+    
     def post(self, request):
-        serializer = VerifyOtpSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        phone_number = serializer.validated_data['phone_number']
-        otp_code = serializer.validated_data['otp_code']
-
-        try:
-            user = User.objects.get(phone_number=phone_number)
-        except User.DoesNotExist:
-            return Response({"detail": "Phone number not found."}, status=status.HTTP_404_NOT_FOUND)
-
-        now = timezone.now()
-        if user.otp_code != otp_code:
-            return Response({"detail": "Invalid OTP."}, status=status.HTTP_400_BAD_REQUEST)
-        if user.otp_created_at and (now - user.otp_created_at).total_seconds() > 300:
-            return Response({"detail": "OTP expired."}, status=status.HTTP_400_BAD_REQUEST)
-
-        user.is_phone_verified = True
-        user.otp_code = None
-        user.save()
-
-        return Response({"detail": "Phone number verified!"})
+        print(f"[DEBUG] OTP Verification Request data: {request.data}")
+        serializer = VerifyOTPSerializer(data=request.data)
+        if serializer.is_valid():
+            # The validation in the serializer handles the OTP verification
+            # If we reach this point, the OTP was valid
+            phone = serializer.validated_data['phone_number']
+            otp = serializer.validated_data['otp']
+            print(f"[DEBUG] OTP verified successfully for {phone}")
+            
+            return Response(
+                {
+                    "message": "Phone number verified successfully.",
+                    "phone_number": phone,
+                    "verified": True
+                },
+                status=status.HTTP_200_OK
+            )
+        print(f"[DEBUG] OTP Verification errors: {serializer.errors}")
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 # views.py
@@ -224,7 +247,10 @@ class CreatePasswordView(APIView):
         code.is_used = True
         code.save()
 
-        return Response({"message": "Password set. Please complete your profile."})
+        return Response(
+            {"message": "Password set. Please complete your profile."},
+            status=status.HTTP_200_OK
+        )
 
 # views.py
 @method_decorator(csrf_exempt, name='dispatch')
@@ -268,7 +294,10 @@ class CompleteSignupView(APIView):
             }
         )
         # ...
-        return Response({"message": "Profile completed. Please set your PIN."})
+        return Response(
+            {"message": "Profile completed. Please set your PIN."},
+            status=status.HTTP_200_OK
+        )
 
 
 # views.py
@@ -285,7 +314,10 @@ class CreatePinView(APIView):
         
 
         # ...
-        return Response({"message": "PIN set. Signup complete!"})
+        return Response(
+            {"message": "PIN set. Signup complete!"},
+            status=status.HTTP_200_OK
+        )
 User = get_user_model()
 
 

@@ -30,7 +30,7 @@ PASSWORD_RESET_BASE_URL = FRONTEND_URL + "/reset-password"
 
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-(aefx-qt*jnn8l(9f^%6uh3@cry_$vxjp1ow3+er*(#h^0&v81'
+SECRET_KEY = env("SECRET_KEY", default='django-insecure-(aefx-qt*jnn8l(9f^%6uh3@cry_$vxjp1ow3+er*(#h^0&v81')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -126,7 +126,10 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
+# Termii SMS API Configuration
+TERMII_API_KEY = env("TERMII_API_KEY", default="")
+TERMII_SENDER_ID = env("TERMII_SENDER_ID", default='N-Alert')
+TERMII_BASE_URL = env("TERMII_BASE_URL", default='https://v3.api.termii.com')
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 

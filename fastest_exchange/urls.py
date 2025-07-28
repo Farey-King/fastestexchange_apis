@@ -8,14 +8,13 @@ from rest_framework_simplejwt.views import (
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView,SpectacularRedocView
 
 from fastest_exchange.views import (
-                                    SendOtpView,
+                                    SendOTPView,
                                     SignupView,
                                     CreatePasswordView,
                                     CompleteSignupView,
                                     CreatePinView,
                                     LoginView,
-                                    VerifyOtpView,
-                                   
+                                    VerifyOTPView,
                                    )
 app_name = "expense_tracker"
 # Routers provide an easy way of automatically determining the URL conf.
@@ -29,6 +28,8 @@ urlpatterns = [
     path('api/auth/create-password', CreatePasswordView.as_view(), name='create-password'),
     path('api/auth/complete-signup', CompleteSignupView.as_view(), name='complete-signup'),
     path('api/auth/create-pin', CreatePinView.as_view(), name='create-pin'),
+    path('phone/request-otp/', SendOTPView.as_view(), name='request-otp'),
+    path('phone/verify-otp/', VerifyOTPView.as_view(), name='verify-otp'),
 
     # Dashboard URLs
     
@@ -43,10 +44,7 @@ urlpatterns = [
     path("api/auth/token/refresh", TokenRefreshView.as_view(), name="token_refresh"),
     path("api/auth/token/verify", TokenVerifyView.as_view(), name="token_verify"),
     path("api/auth/token/blacklist", TokenBlacklistView.as_view(), name="token_blacklist"),
-    path('send-otp/', SendOtpView.as_view(), name='send-otp'),
-    path('verify-otp/', VerifyOtpView.as_view(), name='verify-otp'),
-    # path("api/user", views.UserProfileView.as_view(), name="user"),
-    
+   
    
     
    

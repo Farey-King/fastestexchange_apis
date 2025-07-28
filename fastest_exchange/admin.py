@@ -19,6 +19,7 @@ from .models import (
     TransactionHistory,
     TransactionDownload,
     MobileMoney,
+    PhoneNumber
    
 )
 
@@ -139,6 +140,7 @@ admin.site.register(CreatePassword)
 admin.site.register(CompleteSignup)
 admin.site.register(CreatePin)
 admin.site.register(Login)
+admin.site.register(PhoneNumber)
 @admin.register(VerificationCode)
 class VerificationCodeAdmin(admin.ModelAdmin):
     list_display = ('user', 'code', 'created_at')

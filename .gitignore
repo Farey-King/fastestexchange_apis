@@ -25,7 +25,8 @@ Thumbs.db
 
 # Env files
 .env
-.env.*
+.env.local
+.env.*.local
 
 # PyCharm / JetBrains IDE
 .idea/
