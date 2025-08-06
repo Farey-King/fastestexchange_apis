@@ -85,6 +85,26 @@ class Login(models.Model):
 
     def __str__(self):
         return f"Login for {self.email} with password {self.password}"
+    
+# models.py
+
+class SwapEngine(models.Model):
+    user = models.ForeignKey(Login, on_delete=models.CASCADE)
+    currency_from = models.CharField(max_length=10)
+    currency_to = models.CharField(max_length=10)
+    amount_sent = models.DecimalField(max_digits=12, decimal_places=2)
+    converted_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    exchange_rate = models.DecimalField(max_digits=12, decimal_places=6) 
+    receiver_account_name = models.CharField(max_length=100)
+    receiver_account_number = models.CharField(max_length=100)
+    receiver_bank = models.CharField(max_length=100)  # <-- Snapshot!
+    created_at = models.DateTimeField(auto_now_add=True)
+
+   
+
+    def __str__(self):
+        return f"{self.amount} {self.currency_from} to {self.currency_to} at {self.exchange_rate}"
+
 
 class UserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra_fields):

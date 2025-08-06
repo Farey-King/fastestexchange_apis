@@ -13,14 +13,13 @@ from .models import (
     Signup,
     CreatePassword,
     CreatePin,
-    Swap,
     ExchangeRate,
     Login,
     TransactionHistory,
     TransactionDownload,
     MobileMoney,
-    PhoneNumber
-   
+    PhoneNumber,
+    SwapEngine,
 )
 
 # ✅ Custom User change form
@@ -71,11 +70,11 @@ class TransactionHistoryAdmin(admin.ModelAdmin):
     search_fields = ('reason', 'beneficiary', 'status')
     list_filter = ('status', 'date')
 
-@admin.register(Swap)
-class SwapAdmin(admin.ModelAdmin):
-    list_display = ['from_currency', 'to_currency', 'amount_sent', 'exchange_rate', 'converted_amount']
-    search_fields = ['user__email', 'from_currency', 'to_currency']
-    list_filter = ['from_currency', 'to_currency']
+# @admin.register(Swap)
+# class SwapAdmin(admin.ModelAdmin):
+#     list_display = ['from_currency', 'to_currency', 'amount_sent', 'exchange_rate', 'converted_amount']
+#     search_fields = ['user__email', 'from_currency', 'to_currency']
+#     list_filter = ['from_currency', 'to_currency']
 
 
 
@@ -141,6 +140,7 @@ admin.site.register(CompleteSignup)
 admin.site.register(CreatePin)
 admin.site.register(Login)
 admin.site.register(PhoneNumber)
+admin.site.register(SwapEngine)
 @admin.register(VerificationCode)
 class VerificationCodeAdmin(admin.ModelAdmin):
     list_display = ('user', 'code', 'created_at')

@@ -96,3 +96,54 @@ def send_otp_to_phone(phone_number: str, otp_code: str):
 
 def generate_otp():
     return str(random.randint(100000, 999999))
+
+
+def get_live_rates():
+    """Fetch live exchange rates from a free API service
+    
+    Returns:
+        dict: Dictionary with currency codes as keys and exchange rates as values
+              All rates are relative to USD (1 USD = rate * currency)
+    """
+    try:
+        # Using exchangerate-api.com free tier (1500 requests/month)
+        # You can replace this with any other exchange rate API
+        url = "https://api.exchangerate-api.com/v4/latest/USD"
+        response = requests.get(url, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            return data.get('rates', {})
+        else:
+            print(f"[ERROR] Failed to fetch exchange rates. Status: {response.status_code}")
+            # Return fallback rates if API fails
+            return get_fallback_rates()
+    except requests.RequestException as e:
+        print(f"[ERROR] Network error fetching exchange rates: {e}")
+        return get_fallback_rates()
+    except Exception as e:
+        print(f"[ERROR] Unexpected error fetching exchange rates: {e}")
+        return get_fallback_rates()
+
+
+def get_fallback_rates():
+    """Fallback exchange rates in case API is unavailable
+    
+    Returns:
+        dict: Dictionary with common currency exchange rates
+    """
+    return {
+        'USD': 1.0,
+        'EUR': 0.85,
+        'GBP': 0.73,
+        'NGN': 460.0,
+        'CAD': 1.25,
+        'AUD': 1.35,
+        'JPY': 110.0,
+        'CHF': 0.92,
+        'CNY': 6.45,
+        'INR': 74.5,
+        'ZAR': 14.8,
+        'KES': 108.0,
+        'GHS': 6.1
+    }

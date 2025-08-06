@@ -26,7 +26,7 @@ from .models import (
     CompleteSignup,
     CreatePassword,
     CreatePin,
-    Swap,
+    SwapEngine,
     DeliveryMethod,
     PayoutDetail, 
     # Referral,
@@ -148,7 +148,16 @@ class PINSerializer(serializers.Serializer):
             raise serializers.ValidationError("PIN must contain only digits")
         return value
 
+class SwapSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SwapEngine
+        fields = ['id', 'user', 'from_currency', 'to_currency', 'amount_sent', 'exchange_rate', 'converted_amount', 'status', 'created_at']
+        read_only_fields = ['id', 'user', 'status', 'created_at']
 
+    def create(self, validated_data):
+        validated_data['user'] = self.context['request'].user
+        return super().create(validated_data)
+   
 
 class ReceiveCashSerializer(serializers.ModelSerializer):
     class Meta:
@@ -201,20 +210,24 @@ class MobileMoneySerializer(serializers.ModelSerializer):
 
 class SwapSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Swap
-        fields = '__all__'
-    def validate(self, data):
-        amount_sent = data["amount_sent"]
-        exchange_rate = data["exchange_rate"]
+        model = SwapEngine
+        fields = [
+            "currency_from", "currency_to", "amount_sent",
+            "exchange_rate", "receiver_account_name",
+            "receiver_account_number", "receiver_bank", "converted_amount"
+        ]
+        read_only_fields = ["converted_amount"]  # hides it from Swagger input
 
-        if amount_sent <= 0:
+    def validate(self, data):
+        amount_sent = data.get("amount_sent")
+        exchange_rate = data.get("exchange_rate")
+
+        if amount_sent is None or amount_sent <= 0:
             raise serializers.ValidationError("Amount sent must be greater than zero.")
-        if exchange_rate <= 0:
+        if exchange_rate is None or exchange_rate <= 0:
             raise serializers.ValidationError("Exchange rate must be greater than zero.")
 
-        converted_amount = amount_sent * exchange_rate
-        data["converted_amount"] = converted_amount
-
+        data["converted_amount"] = amount_sent * exchange_rate
         return data
 
 

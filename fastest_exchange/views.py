@@ -34,8 +34,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator 
 from django.conf import settings 
 from django.urls import reverse 
-from .utils import send_otp_to_phone
-
+from .utils import send_otp_to_phone, get_live_rates
 
 from drf_spectacular.utils import extend_schema
 
@@ -58,6 +57,7 @@ from .models import (
     CreatePin,  # Added import for CreatePin
     Login,  # Added import for Login
     PhoneNumber,  # Added import for PhoneNumber
+    SwapEngine,
 )
 
 from .serializers import (
@@ -76,6 +76,7 @@ from .serializers import (
     SignupSerializer,  # Added import for SignupSerializer
     SendOTPSerializer,  # Added import for SendOTPSerializer
     VerifyOTPSerializer,  # Added import for VerifyOTPSerializer
+    SwapSerializer,  # Added import for SwapSerializer
 )
 
 
@@ -359,27 +360,77 @@ class LoginView(APIView):
         }, status=status.HTTP_200_OK)
 
 
+@method_decorator(csrf_exempt, name='dispatch')
+class SwapView(APIView):
+    serializer_class = SwapSerializer
+    permission_classes = [permissions.AllowAny]
 
-    @csrf_exempt
-    def send_verification_code(self, user, code_type):
-        code = ''.join(random.choices(string.digits, k=6))
-        expires_at = timezone.now() + timedelta(minutes=10)
+    def post(self, request):
+        serializer = SwapSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        data = serializer.validated_data
+        from_currency = data["currency_from"].upper()
+        to_currency = data["currency_to"].upper()
+        amount_sent = data["amount_sent"]
+
+        rates = get_live_rates()
+        if from_currency not in rates or to_currency not in rates:
+            return Response({"error": "Live exchange rate not available."}, status=400)
+        if from_currency == to_currency:
+            return Response({"error": "Cannot exchange the same currency."}, status=400)
         
-        VerificationCode.objects.create(
-            user=user,
-            code=code,
-            code_type=code_type,
-            expires_at=expires_at
+        # Calculate USD amount first
+        usd_amount = float(amount_sent) / rates[from_currency]
+        
+        # Conditional exchange rate based on USD value
+        if usd_amount < 100:
+            # Apply a LOWER rate (worse for user)
+            # e.g., reduce the target rate by 5%
+            adjusted_rate = rates[to_currency] * 0.95
+        else:
+            adjusted_rate = rates[to_currency]
+
+        # Calculate final amounts
+        converted_amount = usd_amount * adjusted_rate
+        snapshot_rate = converted_amount / float(amount_sent)
+
+        transaction = SwapEngine.objects.create(
+            user=request.user,
+            currency_from=from_currency,
+            currency_to=to_currency,
+            amount_sent=float(data["amount_sent"]),
+            converted_amount=round(converted_amount, 2),
+            exchange_rate=round(snapshot_rate, 6),
+            receiver_account_name=data["receiver_account_name"],
+            receiver_account_number=data["receiver_account_number"],
+            receiver_bank=data["receiver_bank"],
         )
-        
-        if code_type == 'email':
-            send_mail(
-                'Verify Your Email',
-                f'Your verification code is: {code}',
-                settings.DEFAULT_FROM_EMAIL,
-                [user.email],
-                fail_silently=False,
-            )
+
+        return Response(SwapSerializer(transaction).data, status=201)
+
+
+@csrf_exempt
+def send_verification_code(user, code_type):
+    code = ''.join(random.choices(string.digits, k=6))
+    expires_at = timezone.now() + timedelta(minutes=10)
+    
+    VerificationCode.objects.create(
+        user=user,
+        code=code,
+        code_type=code_type,
+        expires_at=expires_at
+    )
+    
+    if code_type == 'email':
+        send_mail(
+            'Verify Your Email',
+            f'Your verification code is: {code}',
+            settings.DEFAULT_FROM_EMAIL,
+            [user.email],
+            fail_silently=False,
+        )
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
 @csrf_exempt

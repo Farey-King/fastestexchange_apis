@@ -15,6 +15,7 @@ from fastest_exchange.views import (
                                     CreatePinView,
                                     LoginView,
                                     VerifyOTPView,
+                                    SwapView
                                    )
 app_name = "expense_tracker"
 # Routers provide an easy way of automatically determining the URL conf.
@@ -32,7 +33,8 @@ urlpatterns = [
     path('phone/verify-otp/', VerifyOTPView.as_view(), name='verify-otp'),
 
     # Dashboard URLs
-    
+    path("api/swap", SwapView.as_view(), name="swap"),
+
     # Auth Token generation
     path("api/", include("rest_framework.urls", namespace="rest_framework")),
     path("api/", include(router.urls)),
