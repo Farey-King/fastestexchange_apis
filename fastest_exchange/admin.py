@@ -20,6 +20,8 @@ from .models import (
     MobileMoney,
     PhoneNumber,
     SwapEngine,
+    SavedBeneficiary,
+    KYC,  # Assuming KYC is a model you have defined
 )
 
 # ✅ Custom User change form
@@ -140,6 +142,8 @@ admin.site.register(CompleteSignup)
 admin.site.register(CreatePin)
 admin.site.register(Login)
 admin.site.register(PhoneNumber)
+admin.site.register(SavedBeneficiary)
+admin.site.register(KYC)
 # admin.site.register(SwapEngine)
 @admin.register(SwapEngine)
 class SwapEngineAdmin(admin.ModelAdmin):

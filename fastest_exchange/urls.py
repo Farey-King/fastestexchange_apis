@@ -17,6 +17,10 @@ from fastest_exchange.views import (
                                     VerifyOTPView,
                                     SwapView,
                                     ManualVerifyView,
+                                    SavedBeneficiaryView,
+                                    KYCSubmissionView,
+                                    KYCReviewQueueView,
+                                    KYCApproveRejectView,
                                    )
 app_name = "expense_tracker"
 # Routers provide an easy way of automatically determining the URL conf.
@@ -36,6 +40,10 @@ urlpatterns = [
     # Dashboard URLs
     path("api/swap", SwapView.as_view(), name="swap"),
     path("api/verify/manual/<int:transaction_id>/", ManualVerifyView.as_view(), name="manual-verify"),
+    path("api/saved-beneficiaries/", SavedBeneficiaryView.as_view(), name="saved-beneficiaries"),
+     path("kyc/submit/", KYCSubmissionView.as_view(), name="kyc-submit"),
+    path("kyc/review-queue/", KYCReviewQueueView.as_view(), name="kyc-review-queue"),
+    path("kyc/review/<int:pk>/", KYCApproveRejectView.as_view(), name="kyc-approve-reject"),
 
     # Auth Token generation
     path("api/", include("rest_framework.urls", namespace="rest_framework")),

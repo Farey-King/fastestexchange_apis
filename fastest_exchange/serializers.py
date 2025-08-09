@@ -37,6 +37,8 @@ from .models import (
     BankTransfer,
     MobileMoney,
     ReceiveCash,
+    SavedBeneficiary,
+    KYC,
    
 )
 
@@ -232,7 +234,49 @@ class SwapSerializer(serializers.ModelSerializer):
         return data
 
 
+class SavedBeneficiarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SavedBeneficiary
+        fields = "__all__"
+        read_only_fields = ["id", "user", "status", "created_at", "exchange_rate"]
 
+    def create(self, validated_data):
+        request = self.context["request"]
+        validated_data["user"] = request.user
+
+        beneficiary = validated_data.get("beneficiary")
+        if beneficiary:
+            # Pull details from saved beneficiary
+            validated_data["beneficiary_full_name"] = beneficiary.full_name
+            validated_data["beneficiary_country"] = beneficiary.country
+            validated_data["beneficiary_delivery_method"] = beneficiary.delivery_method
+            validated_data["beneficiary_account_number"] = beneficiary.account_number
+            validated_data["beneficiary_currency"] = beneficiary.currency
+
+class KYCSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = KYC
+        fields = "__all__"
+        read_only_fields = ["status", "submitted_at", "reviewed_at", "reviewed_by"]
+
+class KYCReviewSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = KYC
+        fields = [
+            "id", "user", "document_type", "document_number", "document_file",
+            "status", "admin_notes", "reviewed_by", "reviewed_at"
+        ]
+        read_only_fields = [
+            "id", "user", "document_type", "document_number", "document_file",
+            "reviewed_by", "reviewed_at"
+        ]
+
+        # Here, exchange rate would be fetched dynamically or from request
+        # Example: set it manually for now
+        # validated_data["exchange_rate"] = 1500.50
+
+        # return super().create(validated_data)
+    
 class ExchangeRateSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExchangeRate

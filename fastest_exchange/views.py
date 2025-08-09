@@ -7,7 +7,7 @@ from typing import Dict, List, Type
 
 from django.contrib.auth import update_session_auth_hash, get_user_model, authenticate
 from django.db import IntegrityError 
-from django.db import models 
+# from django.db import models 
 from django.db.models import ProtectedError 
 from django.shortcuts import render, get_object_or_404
 from django.http import FileResponse 
@@ -58,6 +58,8 @@ from .models import (
     Login,  # Added import for Login
     PhoneNumber,  # Added import for PhoneNumber
     SwapEngine,
+    SavedBeneficiary,  # Added import for SavedBeneficiary
+    KYC
 )
 
 from .serializers import (
@@ -65,7 +67,8 @@ from .serializers import (
     MyTokenObtainPairSerializer,
    
      # Added import for UserLoginSerializer
-    PINSerializer,  # Added import for PINSerializer
+    PINSerializer,
+    # SavedBeneficiarySerializer,  # Added import for PINSerializer
     VerificationCodeSerializer,  # Added import for VerificationCodeSerializer
     SignupSerializer,  # Added import for SignupSerializer
     
@@ -77,6 +80,9 @@ from .serializers import (
     SendOTPSerializer,  # Added import for SendOTPSerializer
     VerifyOTPSerializer,  # Added import for VerifyOTPSerializer
     SwapSerializer,  # Added import for SwapSerializer
+    SavedBeneficiarySerializer,  # Added import for SavedBeneficiarySerializer
+    KYCSerializer,  # Added import for KYCSerializer
+    KYCReviewSerializer,  # Added import for KYCReviewSerializer
 )
 
 
@@ -426,7 +432,7 @@ class SwapView(APIView):
 
         # return Response(SwapSerializer(transaction).data, status=201)
 class ManualVerifyView(APIView):
-    
+
     """
     Manually verify a swap transaction.
     Only accessible by admin users.
@@ -444,6 +450,48 @@ class ManualVerifyView(APIView):
         swap.save()
         return Response({"message": "Transaction manually verified"})
     
+class SavedBeneficiaryView(generics.ListCreateAPIView):
+    serializer_class = SavedBeneficiarySerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return SavedBeneficiary.objects.filter(user=self.request.user)
+    
+class SavedBeneficiaryDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = SavedBeneficiarySerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return SavedBeneficiary.objects.filter(user=self.request.user)
+    
+# --- USER SUBMITS KYC ---
+class KYCSubmissionView(generics.CreateAPIView):
+    serializer_class = KYCSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+# --- ADMIN VIEW & REVIEW QUEUE ---
+class KYCReviewQueueView(generics.ListAPIView):
+    serializer_class = KYCSerializer
+    permission_classes = [permissions.IsAdminUser]
+
+    def get_queryset(self):
+        return KYC.objects.filter(status="pending").order_by("submitted_at")
+
+# --- ADMIN APPROVE/REJECT ---
+class KYCApproveRejectView(generics.UpdateAPIView):
+    serializer_class = KYCReviewSerializer
+    permission_classes = [permissions.IsAdminUser]
+    queryset = KYC.objects.all()
+
+    def perform_update(self, serializer):
+        serializer.save(
+            reviewed_by=self.request.user,
+            reviewed_at=timezone.now()
+        )
+
 @csrf_exempt
 def send_verification_code(user, code_type):
     code = ''.join(random.choices(string.digits, k=6))
