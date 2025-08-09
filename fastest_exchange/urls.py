@@ -15,7 +15,8 @@ from fastest_exchange.views import (
                                     CreatePinView,
                                     LoginView,
                                     VerifyOTPView,
-                                    SwapView
+                                    SwapView,
+                                    ManualVerifyView,
                                    )
 app_name = "expense_tracker"
 # Routers provide an easy way of automatically determining the URL conf.
@@ -34,6 +35,7 @@ urlpatterns = [
 
     # Dashboard URLs
     path("api/swap", SwapView.as_view(), name="swap"),
+    path("api/verify/manual/<int:transaction_id>/", ManualVerifyView.as_view(), name="manual-verify"),
 
     # Auth Token generation
     path("api/", include("rest_framework.urls", namespace="rest_framework")),

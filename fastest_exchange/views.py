@@ -20,7 +20,7 @@ from rest_framework import generics, permissions, status
 from rest_framework.authtoken.models import Token 
 from rest_framework.authtoken.views import ObtainAuthToken 
 from rest_framework.decorators import action, api_view, permission_classes 
-from rest_framework.permissions import AllowAny 
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.request import Request 
 from rest_framework.response import Response 
 from rest_framework.views import APIView 
@@ -363,17 +363,21 @@ class LoginView(APIView):
 @method_decorator(csrf_exempt, name='dispatch')
 class SwapView(APIView):
     serializer_class = SwapSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsAuthenticated] 
 
     def post(self, request):
         serializer = SwapSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+        user = request.user
+
         data = serializer.validated_data
         from_currency = data["currency_from"].upper()
         to_currency = data["currency_to"].upper()
         amount_sent = data["amount_sent"]
+        payment_method = data["payment_method"]
+        verification_mode = data.get("verification_mode", "manual")
 
         rates = get_live_rates()
         if from_currency not in rates or to_currency not in rates:
@@ -395,9 +399,11 @@ class SwapView(APIView):
         # Calculate final amounts
         converted_amount = usd_amount * adjusted_rate
         snapshot_rate = converted_amount / float(amount_sent)
-
+    
+        
+        # login_user = Login.objects.get(email=request.user.email)
         transaction = SwapEngine.objects.create(
-            user=request.user,
+            
             currency_from=from_currency,
             currency_to=to_currency,
             amount_sent=float(data["amount_sent"]),
@@ -406,11 +412,38 @@ class SwapView(APIView):
             receiver_account_name=data["receiver_account_name"],
             receiver_account_number=data["receiver_account_number"],
             receiver_bank=data["receiver_bank"],
+            payment_method=data["payment_method"],
+            verification_mode=data["verification_mode"],
+            proof_of_payment=data.get("proof_of_payment"),
+            status=data.get("status", "pending"),#default to pending
         )
+        return Response({
+            "message": "Swap created. Awaiting payment.",
+            "transaction_id": transaction.id,
+            "status": transaction.status,
+            "amount_to_receive": converted_amount
+        }, status=201)
 
-        return Response(SwapSerializer(transaction).data, status=201)
+        # return Response(SwapSerializer(transaction).data, status=201)
+class ManualVerifyView(APIView):
+    
+    """
+    Manually verify a swap transaction.
+    Only accessible by admin users.
+    """
+    queryset = SwapEngine.objects.all()
+    serializer_class = SwapSerializer
+    permission_classes = [permissions.IsAdminUser]
 
+    def post(self, request, transaction_id):
+        swap = get_object_or_404(SwapEngine, id=transaction_id)
+        if swap.transaction_status != "pending_verification":
+            return Response({"error": "Transaction not in verification stage"}, status=400)
 
+        swap.transaction_status = "verified"
+        swap.save()
+        return Response({"message": "Transaction manually verified"})
+    
 @csrf_exempt
 def send_verification_code(user, code_type):
     code = ''.join(random.choices(string.digits, k=6))

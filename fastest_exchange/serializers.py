@@ -214,9 +214,10 @@ class SwapSerializer(serializers.ModelSerializer):
         fields = [
             "currency_from", "currency_to", "amount_sent",
             "exchange_rate", "receiver_account_name",
-            "receiver_account_number", "receiver_bank", "converted_amount"
+            "receiver_account_number", "receiver_bank", "converted_amount",
+            "payment_method", "verification_mode", "status", "proof_of_payment",
         ]
-        read_only_fields = ["converted_amount"]  # hides it from Swagger input
+        read_only_fields = ["converted_amount","verification_mode","proof_of_payment"]  # hides it from Swagger input
 
     def validate(self, data):
         amount_sent = data.get("amount_sent")

@@ -61,7 +61,7 @@ try:
 except admin.sites.NotRegistered:
     pass
 
-admin.site.register(User, GandariaUserAdmin)
+# admin.site.register(User, GandariaUserAdmin)
 
 
 @admin.register(TransactionHistory)
@@ -140,7 +140,19 @@ admin.site.register(CompleteSignup)
 admin.site.register(CreatePin)
 admin.site.register(Login)
 admin.site.register(PhoneNumber)
-admin.site.register(SwapEngine)
+# admin.site.register(SwapEngine)
+@admin.register(SwapEngine)
+class SwapEngineAdmin(admin.ModelAdmin):
+    list_display = ("id", "currency_from", "currency_to", "amount_sent", "exchange_rate", "status", "created_at")
+    list_filter = ("status", "currency_from", "currency_to")
+    search_fields = ("id", "receiver_account_name", "receiver_account_number")
+    actions = ["verify_selected_transactions"]
+
+    def verify_selected_transactions(self, request, queryset):
+        updated = queryset.filter(status="pending_verification").update(status="verified")
+        self.message_user(request, f"{updated} transaction(s) successfully verified.")
+    verify_selected_transactions.short_description = "Mark selected transactions as verified"
+
 @admin.register(VerificationCode)
 class VerificationCodeAdmin(admin.ModelAdmin):
     list_display = ('user', 'code', 'created_at')

@@ -235,3 +235,11 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # ------------------------------------------------
 
 AUTH_USER_MODEL = 'fastest_exchange.User'
+
+# Flutterwave
+FLUTTERWAVE_SECRET_HASH = os.environ.get("FLUTTERWAVE_SECRET_HASH")  # for incoming webhook header "verif-hash"
+FLUTTERWAVE_SECRET_KEY = os.environ.get("FLUTTERWAVE_SECRET_KEY")    # Bearer for API verify
+
+# Paystack
+PAYSTACK_SECRET_KEY = os.environ.get("PAYSTACK_SECRET_KEY")          # Bearer for API verify
+# paystack uses header "x-paystack-signature" (HMAC SHA512 of request.body using PAYSTACK_SECRET_KEY)

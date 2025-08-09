@@ -89,7 +89,29 @@ class Login(models.Model):
 # models.py
 
 class SwapEngine(models.Model):
-    user = models.ForeignKey(Login, on_delete=models.CASCADE)
+    PAYMENT_METHOD_CHOICES = [
+        ("bank_transfer", "Bank Transfer"),
+        ("mobile_money", "Mobile Money"),
+        ("cash", "Cash"),
+    ]
+
+    CURRENCY_CHOICES = [
+        ("UGX", "Ugandan Shilling"),
+        ("NGN", "Nigerian Naira"),
+        ("USD", "US Dollar"),
+    ]
+
+    VERIFICATION_MODE_CHOICES = [
+        ("manual", "Manual"),
+        ("automated", "Automated"),
+    ]
+
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("verified", "Verified"),
+        ("failed", "Failed"),
+    ]
+    # user = models.ForeignKey(Login, on_delete=models.CASCADE)
     currency_from = models.CharField(max_length=10)
     currency_to = models.CharField(max_length=10)
     amount_sent = models.DecimalField(max_digits=12, decimal_places=2)
@@ -100,10 +122,17 @@ class SwapEngine(models.Model):
     receiver_bank = models.CharField(max_length=100)  # <-- Snapshot!
     created_at = models.DateTimeField(auto_now_add=True)
 
-   
+      # New fields for payment integration
+    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, blank=True, null=True)
+    verification_mode = models.CharField(max_length=20, choices=VERIFICATION_MODE_CHOICES, default="manual")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+
+    # Optional: store proof of payment if user uploads it
+    proof_of_payment = models.FileField(upload_to="payment_proofs/", blank=True, null=True)
+    provider_transaction_id = models.CharField(max_length=100, blank=True, null=True)  # For automated mode
 
     def __str__(self):
-        return f"{self.amount} {self.currency_from} to {self.currency_to} at {self.exchange_rate}"
+        return f"{self.amount_sent} {self.currency_from} to {self.currency_to} at {self.exchange_rate}"
 
 
 class UserManager(BaseUserManager):
