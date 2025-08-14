@@ -22,6 +22,10 @@ from .models import (
     SwapEngine,
     SavedBeneficiary,
     KYC,  # Assuming KYC is a model you have defined
+    
+    # Transaction Engine models
+    Transaction,
+    TransactionStatusHistory,
 )
 
 # ✅ Custom User change form
@@ -162,6 +166,148 @@ class VerificationCodeAdmin(admin.ModelAdmin):
     list_display = ('user', 'code', 'created_at')
     search_fields = ('user__email', 'code')
     list_filter = ('created_at',)
+
+# ==================================================
+# TRANSACTION ENGINE ADMIN
+# ==================================================
+
+class TransactionStatusHistoryInline(admin.TabularInline):
+    model = TransactionStatusHistory
+    extra = 0
+    readonly_fields = ('timestamp', 'changed_by')
+    fields = ('old_status', 'new_status', 'reason', 'changed_by', 'timestamp')
+    ordering = ['-timestamp']
+
+@admin.register(Transaction)
+class TransactionAdmin(admin.ModelAdmin):
+    """Admin interface for the core Transaction model"""
+    
+    list_display = (
+        'transaction_id', 'user_email', 'transaction_type', 'status',
+        'amount_sent', 'currency_from', 'currency_to', 'created_at'
+    )
+    
+    list_filter = (
+        'transaction_type', 'status', 'currency_from', 'currency_to', 'created_at'
+    )
+    
+    search_fields = (
+        'transaction_id', 'user__email', 'user__first_name', 'user__last_name',
+        'notes', 'currency_from', 'currency_to'
+    )
+    
+    readonly_fields = (
+        'transaction_id', 'created_at', 'updated_at', 'completed_at',
+        'ip_address', 'user_agent'
+    )
+    
+    fieldsets = (
+        ('Transaction Info', {
+            'fields': ('transaction_id', 'user', 'transaction_type', 'status')
+        }),
+        ('Financial Details', {
+            'fields': (
+                'amount_sent', 'currency_from', 'amount_received', 
+                'currency_to', 'exchange_rate'
+            )
+        }),
+        ('References', {
+            'fields': (
+                'swap_reference', 'bank_transfer_reference', 'mobile_money_reference',
+                'cash_pickup_reference', 'kyc_reference', 'beneficiary_reference'
+            ),
+            'classes': ('collapse',)
+        }),
+        ('Metadata', {
+            'fields': ('metadata', 'notes'),
+            'classes': ('collapse',)
+        }),
+        ('Tracking', {
+            'fields': ('ip_address', 'user_agent', 'created_at', 'updated_at', 'completed_at'),
+            'classes': ('collapse',)
+        })
+    )
+    
+    inlines = [TransactionStatusHistoryInline]
+    
+    date_hierarchy = 'created_at'
+    ordering = ['-created_at']
+    
+    actions = ['mark_as_completed', 'mark_as_failed', 'mark_as_pending']
+    
+    def user_email(self, obj):
+        return obj.user.email if obj.user else '-'
+    user_email.short_description = 'User Email'
+    user_email.admin_order_field = 'user__email'
+    
+    def mark_as_completed(self, request, queryset):
+        from django.utils import timezone
+        updated = queryset.update(
+            status='COMPLETED',
+            completed_at=timezone.now()
+        )
+        # Create status history for each transaction
+        for transaction in queryset:
+            TransactionStatusHistory.objects.create(
+                transaction=transaction,
+                old_status=transaction.status,
+                new_status='COMPLETED',
+                changed_by=request.user,
+                reason='Bulk action by admin'
+            )
+        self.message_user(request, f'{updated} transaction(s) marked as completed.')
+    mark_as_completed.short_description = 'Mark selected transactions as completed'
+    
+    def mark_as_failed(self, request, queryset):
+        updated = queryset.update(status='FAILED')
+        for transaction in queryset:
+            TransactionStatusHistory.objects.create(
+                transaction=transaction,
+                old_status=transaction.status,
+                new_status='FAILED',
+                changed_by=request.user,
+                reason='Bulk action by admin'
+            )
+        self.message_user(request, f'{updated} transaction(s) marked as failed.')
+    mark_as_failed.short_description = 'Mark selected transactions as failed'
+    
+    def mark_as_pending(self, request, queryset):
+        updated = queryset.update(status='PENDING')
+        for transaction in queryset:
+            TransactionStatusHistory.objects.create(
+                transaction=transaction,
+                old_status=transaction.status,
+                new_status='PENDING',
+                changed_by=request.user,
+                reason='Bulk action by admin'
+            )
+        self.message_user(request, f'{updated} transaction(s) marked as pending.')
+    mark_as_pending.short_description = 'Mark selected transactions as pending'
+
+@admin.register(TransactionStatusHistory)
+class TransactionStatusHistoryAdmin(admin.ModelAdmin):
+    """Admin interface for transaction status history"""
+    
+    list_display = (
+        'transaction_id_display', 'old_status', 'new_status', 
+        'changed_by', 'timestamp'
+    )
+    
+    list_filter = ('old_status', 'new_status', 'timestamp', 'changed_by')
+    
+    search_fields = (
+        'transaction__transaction_id', 'transaction__user__email',
+        'reason', 'changed_by__email'
+    )
+    
+    readonly_fields = ('transaction', 'timestamp')
+    
+    ordering = ['-timestamp']
+    
+    def transaction_id_display(self, obj):
+        return obj.transaction.transaction_id if obj.transaction else '-'
+    transaction_id_display.short_description = 'Transaction ID'
+    transaction_id_display.admin_order_field = 'transaction__transaction_id'
 
 
 

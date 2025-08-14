@@ -25,7 +25,7 @@ environ.Env.read_env(BASE_DIR / ".env")
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 #  Update FRONTEND_URL
-FRONTEND_URL = env.bool("FRONTEND_URL", "http://localhost:5173")
+FRONTEND_URL = env("FRONTEND_URL", default="http://localhost:5173")
 PASSWORD_RESET_BASE_URL = FRONTEND_URL + "/reset-password"
 
 
@@ -170,16 +170,28 @@ MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/media/"
 # DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
 
 # ------------------------------------------------
-# EMAIL
+# EMAIL CONFIGURATION
 # ------------------------------------------------
 
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+# Email Backend Configuration
+if DEBUG:
+    # For development, use console backend to see emails in console
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+else:
+    # For production, use SMTP
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+
+# SMTP Configuration (ZeptoMail)
 EMAIL_HOST = env("EMAIL_HOST", default="smtp.zeptomail.com")
 EMAIL_PORT = env.int("EMAIL_PORT", default=587)
 EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
 EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
 EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
+EMAIL_USE_SSL = env.bool("EMAIL_USE_SSL", default=False)
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@fastest.exchange")
+
+# Email timeout settings
+EMAIL_TIMEOUT = 30
 
 # ------------------------------------------------
 # REST FRAMEWORK
@@ -231,9 +243,16 @@ CORS_ALLOW_ALL_ORIGINS = True
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # ------------------------------------------------
-# CUSTOM USER MODEL
+# AUTHENTICATION
 # ------------------------------------------------
 
+# Custom authentication backends
+AUTHENTICATION_BACKENDS = [
+    'fastest_exchange.backends.PasswordAuthenticationBackend',
+    'django.contrib.auth.backends.ModelBackend',  # Keep default as fallback
+]
+
+# Custom user model
 AUTH_USER_MODEL = 'fastest_exchange.User'
 
 # Flutterwave

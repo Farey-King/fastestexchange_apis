@@ -59,7 +59,7 @@ from .models import (
     PhoneNumber,  # Added import for PhoneNumber
     SwapEngine,
     SavedBeneficiary,  # Added import for SavedBeneficiary
-    KYC
+    KYC,
 )
 
 from .serializers import (
@@ -82,7 +82,13 @@ from .serializers import (
     SwapSerializer,  # Added import for SwapSerializer
     SavedBeneficiarySerializer,  # Added import for SavedBeneficiarySerializer
     KYCSerializer,  # Added import for KYCSerializer
-    KYCReviewSerializer,  # Added import for KYCReviewSerializer
+    
+    # Transaction Engine serializers
+    TransactionSerializer,
+    TransactionCreateSerializer,
+    TransactionUpdateStatusSerializer,
+    TransactionListSerializer,
+    TransactionStatusHistorySerializer,
 )
 
 
@@ -99,63 +105,109 @@ class SignupView(APIView):
 
         print(f"Received email: {email}")
 
-        # ✅ Check if a user already exists
+        # Check if user already exists
         if User.objects.filter(email=email).exists():
             return Response(
-                {"error": "An account with this email already exists."},
+                {"error": "A user with this email already exists."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # ✅ Create inactive user
-        user = User.objects.create(email=email, is_active=False)
+        try:
+            # Create inactive user - ensure proper save
+            user = User.objects.create_user(
+                email=email,
+                is_active=False,  # User is inactive until they verify email
+                password=None  # No password yet
+            )
+            user.save()  # Explicitly save to ensure database persistence
+            
+            print(f"User created with ID: {user.id}")
 
-        # ✅ Generate verification token
-        token = str(uuid.uuid4())
-        expires_at = timezone.now() + timezone.timedelta(minutes=30)
+            # Also create a Signup record for tracking
+            signup_record, created = Signup.objects.get_or_create(
+                email=email,
+                defaults={}
+            )
+            print(f"Signup record created: {created}")
 
-        VerificationCode.objects.create(
-            user=user,
-            code=token,
-            code_type='email',
-            expires_at=expires_at
-        )
+            # Generate verification token
+            token = str(uuid.uuid4())
+            expires_at = timezone.now() + timezone.timedelta(minutes=30)
 
-        # ✅ Build link
-        verification_url = (
-            f"{settings.FRONTEND_URL}/create-password"
-            f"?token={token}&email={email}"
-        )
+            VerificationCode.objects.create(
+                user=user,
+                code=token,
+                code_type='email',
+                expires_at=expires_at
+            )
+            print(f"Verification code created: {token}")
 
-        print(f"Verification URL: {verification_url}")
+            # Build verification link
+            verification_url = (
+                f"{settings.FRONTEND_URL}/create-password"
+                f"?token={token}&email={email}"
+            )
 
-        # ✅ Send email
-        email_message = EmailMessage(
-            subject="Verify Your Email",
-            body=f"""
-Hi,
+            print(f"Verification URL: {verification_url}")
 
-Thanks for signing up!
+            # Send email
+            try:
+                email_message = EmailMessage(
+                    subject="Verify Your Email - Fastest Exchange",
+                    body=f"""
+Hello!
 
-Click below to verify your email and set your password:
+Welcome to Fastest Exchange! Thanks for signing up.
+
+To complete your registration, please verify your email address and set your password by clicking the link below:
 
 {verification_url}
 
-This link will expire in 30 minutes.
+This verification link will expire in 30 minutes.
 
-If you didn't request this, you can ignore this email.
+If you didn't create an account with us, you can safely ignore this email.
 
-Thanks,
-Your fastest.exchange Team
+Best regards,
+The Fastest Exchange Team
 """,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            to=[email],
-        )
-        email_message.send(fail_silently=False)
-
-        return Response(
-            {"message": "Verification email sent."},
-            status=status.HTTP_201_CREATED
-        )
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    to=[email],
+                )
+                
+                # In development with DEBUG=True, this will print to console
+                # In production, it will actually send the email
+                email_message.send(fail_silently=False)
+                
+                print(f"Verification email sent to: {email}")
+                
+                return Response(
+                    {
+                        "message": "Account created successfully! Please check your email to verify your account and set your password.",
+                        "email": email,
+                        "user_id": user.id
+                    },
+                    status=status.HTTP_201_CREATED
+                )
+                
+            except Exception as e:
+                print(f"Email sending failed: {e}")
+                # Even if email fails, user is created, so inform the user
+                return Response(
+                    {
+                        "message": "Account created but email sending failed. Please contact support.",
+                        "email": email,
+                        "user_id": user.id,
+                        "error": str(e)
+                    },
+                    status=status.HTTP_201_CREATED
+                )
+                
+        except Exception as e:
+            print(f"User creation failed: {e}")
+            return Response(
+                {"error": f"Failed to create user: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 @extend_schema(
     request=SendOTPSerializer,
@@ -377,60 +429,243 @@ class SwapView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         user = request.user
-
         data = serializer.validated_data
+        
         from_currency = data["currency_from"].upper()
         to_currency = data["currency_to"].upper()
-        amount_sent = data["amount_sent"]
+        amount_sent = float(data["amount_sent"])
         payment_method = data["payment_method"]
-        verification_mode = data.get("verification_mode", "manual")
 
-        rates = get_live_rates()
-        if from_currency not in rates or to_currency not in rates:
-            return Response({"error": "Live exchange rate not available."}, status=400)
+        # Validate currency pair
         if from_currency == to_currency:
             return Response({"error": "Cannot exchange the same currency."}, status=400)
         
-        # Calculate USD amount first
-        usd_amount = float(amount_sent) / rates[from_currency]
+        # Calculate conversion using swap engine logic
+        swap_result = self.calculate_swap(
+            from_currency=from_currency,
+            to_currency=to_currency,
+            amount_sent=amount_sent
+        )
         
-        # Conditional exchange rate based on USD value
-        if usd_amount < 100:
-            # Apply a LOWER rate (worse for user)
-            # e.g., reduce the target rate by 5%
-            adjusted_rate = rates[to_currency] * 0.95
-        else:
-            adjusted_rate = rates[to_currency]
-
-        # Calculate final amounts
-        converted_amount = usd_amount * adjusted_rate
-        snapshot_rate = converted_amount / float(amount_sent)
-    
+        if "error" in swap_result:
+            return Response({"error": swap_result["error"]}, status=400)
         
-        # login_user = Login.objects.get(email=request.user.email)
+        # Create swap transaction record
         transaction = SwapEngine.objects.create(
-            
             currency_from=from_currency,
             currency_to=to_currency,
-            amount_sent=float(data["amount_sent"]),
-            converted_amount=round(converted_amount, 2),
-            exchange_rate=round(snapshot_rate, 6),
+            amount_sent=amount_sent,
+            converted_amount=round(swap_result["converted_amount"], 2),
+            exchange_rate=round(swap_result["exchange_rate"], 6),
             receiver_account_name=data["receiver_account_name"],
             receiver_account_number=data["receiver_account_number"],
             receiver_bank=data["receiver_bank"],
-            payment_method=data["payment_method"],
-            verification_mode=data["verification_mode"],
+            payment_method=payment_method,
+            verification_mode=data.get("verification_mode", "manual"),
             proof_of_payment=data.get("proof_of_payment"),
-            status=data.get("status", "pending"),#default to pending
+            status=data.get("status", "pending"),
         )
+        
+        # Create corresponding Transaction Engine record for tracking
+        try:
+            from .models import Transaction, TransactionType, TransactionStatusHistory
+            with db_transaction.atomic():
+                main_transaction = Transaction.objects.create(
+                    user=request.user,
+                    transaction_type=TransactionType.SWAP,
+                    amount_sent=amount_sent,
+                    currency_from=from_currency,
+                    amount_received=swap_result["converted_amount"],
+                    currency_to=to_currency,
+                    exchange_rate=swap_result["exchange_rate"],
+                    swap_reference=transaction,
+                    metadata={
+                        'payment_method': payment_method,
+                        'receiver_details': {
+                            'account_name': data["receiver_account_name"],
+                            'account_number': data["receiver_account_number"],
+                            'bank': data["receiver_bank"]
+                        }
+                    },
+                    ip_address=self.get_client_ip(request),
+                    user_agent=request.META.get('HTTP_USER_AGENT', '')
+                )
+                
+                # Create status history
+                TransactionStatusHistory.objects.create(
+                    transaction=main_transaction,
+                    old_status=None,
+                    new_status='INITIATED',
+                    changed_by=request.user,
+                    reason='Swap transaction created'
+                )
+        except Exception as e:
+            print(f"Warning: Failed to create Transaction Engine record: {e}")
+        
         return Response({
-            "message": "Swap created. Awaiting payment.",
+            "message": "Swap created successfully. Awaiting payment.",
             "transaction_id": transaction.id,
+            "swap_details": {
+                "from_currency": from_currency,
+                "to_currency": to_currency,
+                "amount_sent": amount_sent,
+                "amount_to_receive": round(swap_result["converted_amount"], 2),
+                "exchange_rate": round(swap_result["exchange_rate"], 6),
+                "rate_type": swap_result["rate_type"]
+            },
             "status": transaction.status,
-            "amount_to_receive": converted_amount
+            "receiver_details": {
+                "account_name": data["receiver_account_name"],
+                "account_number": data["receiver_account_number"],
+                "bank": data["receiver_bank"]
+            },
+            "payment_method": payment_method
         }, status=201)
+    
+    def calculate_swap(self, from_currency: str, to_currency: str, amount_sent: float) -> dict:
+        """
+        Dynamic Swap Engine Logic Implementation
+        
+        Uses ExchangeRateService for dynamic rate calculation with:
+        - Database rates (most recent)
+        - Third-party API rates (live market rates) 
+        - Fallback static rates
+        - Amount-based pricing
+        - Margin and volume discounts
+        """
+        from .exchange_rate_service import ExchangeRateService
+        from decimal import Decimal
+        
+        try:
+            # Convert amount to Decimal for precise calculations
+            amount_decimal = Decimal(str(amount_sent))
+            
+            # Get dynamic exchange rate
+            conversion_result = ExchangeRateService.calculate_conversion(
+                from_currency=from_currency,
+                to_currency=to_currency, 
+                amount=amount_decimal
+            )
+            
+            if 'error' in conversion_result:
+                return conversion_result
+            
+            # Extract rate info for response
+            rate_info = conversion_result.get('rate_info', {})
+            rate_source = rate_info.get('source', 'unknown')
+            
+            # Build rate type description
+            rate_descriptions = {
+                'database': 'Live Database Rate',
+                'fixer': 'Live Market Rate (Fixer.io)',
+                'exchangerate_api': 'Live Market Rate (ExchangeRate-API)', 
+                'currencyapi': 'Live Market Rate (CurrencyAPI)',
+                'fallback_static': 'Static Fallback Rate'
+            }
+            
+            rate_type = f"{from_currency} to {to_currency} - {rate_descriptions.get(rate_source, 'Unknown Source')}"
+            
+            # Add margin and volume discount info if available
+            if 'margin_applied' in rate_info:
+                margin_pct = rate_info['margin_applied'] * 100
+                rate_type += f" (Margin: {margin_pct:.1f}%)"
+            
+            if 'volume_discount' in rate_info and rate_info['volume_discount'] > 0:
+                discount_pct = rate_info['volume_discount'] * 100
+                rate_type += f" (Volume Discount: {discount_pct:.1f}%)"
+            
+            return {
+                "converted_amount": conversion_result['converted_amount'],
+                "exchange_rate": conversion_result['exchange_rate'],
+                "rate_type": rate_type,
+                "rate_source": rate_source,
+                "rate_info": rate_info,
+                "calculation_timestamp": conversion_result.get('calculation_time')
+            }
+            
+        except Exception as e:
+            # Log the error and return fallback
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error in dynamic rate calculation: {e}")
+            
+            # Fallback to static calculation for reliability
+            return self._calculate_swap_fallback(from_currency, to_currency, amount_sent)
+    
+    def _calculate_swap_fallback(self, from_currency: str, to_currency: str, amount_sent: float) -> dict:
+        """
+        Fallback to original static rate calculation if dynamic rates fail
+        """
+        # Define exchange rates
+        EXCHANGE_RATES = {
+            'NGN_TO_USD': 1610,  # Divide NGN by 1610 to get USD
+            'USD_TO_NGN': 1550,  # Multiply USD by 1550 to get NGN
+            'UGX_TO_NGN': 2.35,    # Example rate, adjust as needed
+            'NGN_TO_UGX': 2.27,  # Example rate, adjust as needed
+        }
+        
+        # Supported currency pairs
+        SUPPORTED_PAIRS = [
+            ('NGN', 'USD'),
+            ('USD', 'NGN'),
+            ('NGN', 'UGX'),
+            ('UGX', 'NGN'),
+        ]
+        
+        # Check if currency pair is supported
+        if (from_currency, to_currency) not in SUPPORTED_PAIRS:
+            return {
+                "error": f"Currency pair {from_currency} to {to_currency} is not supported. "
+                        "Supported pairs: NGN↔USD, NGN↔UGX"
+            }
+        
+        # Calculate conversion based on direction
+        if from_currency == 'NGN' and to_currency == 'USD':
+            # NGN to USD: NGN / 1610 = USD
+            rate = EXCHANGE_RATES['NGN_TO_USD']
+            converted_amount = amount_sent / rate
+            exchange_rate = 1 / rate  # Rate per 1 NGN
+            rate_type = "NGN to USD (Static Fallback)"
 
-        # return Response(SwapSerializer(transaction).data, status=201)
+        elif from_currency == 'UGX' and to_currency == 'NGN':
+            # UGX to NGN: UGX * 2.35 = NGN
+            rate = EXCHANGE_RATES['UGX_TO_NGN']
+            converted_amount = amount_sent * rate
+            exchange_rate = rate  # Rate per 1 UGX
+            rate_type = "UGX to NGN (Static Fallback)"
+            
+        elif from_currency == 'NGN' and to_currency == 'UGX':
+            # NGN to UGX: NGN * 2.27 = UGX
+            rate = EXCHANGE_RATES['NGN_TO_UGX']
+            converted_amount = amount_sent * rate
+            exchange_rate = rate  # Rate per 1 NGN
+            rate_type = "NGN to UGX (Static Fallback)"
+
+        elif from_currency == 'USD' and to_currency == 'NGN':
+            # USD to NGN: USD * 1550 = NGN
+            rate = EXCHANGE_RATES['USD_TO_NGN']
+            converted_amount = amount_sent * rate
+            exchange_rate = rate  # Rate per 1 USD
+            rate_type = "USD to NGN (Static Fallback)"
+            
+        else:
+            return {"error": "Unsupported currency conversion"}
+        
+        return {
+            "converted_amount": converted_amount,
+            "exchange_rate": exchange_rate,
+            "rate_type": rate_type,
+            "rate_source": "static_fallback"
+        }
+    
+    def get_client_ip(self, request):
+        """Get client IP address"""
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(',')[0]
+        else:
+            ip = request.META.get('REMOTE_ADDR')
+        return ip
 class ManualVerifyView(APIView):
 
     """
@@ -472,19 +707,6 @@ class KYCSubmissionView(generics.CreateAPIView):
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
-# --- ADMIN VIEW & REVIEW QUEUE ---
-class KYCReviewQueueView(generics.ListAPIView):
-    serializer_class = KYCSerializer
-    permission_classes = [permissions.IsAdminUser]
-
-    def get_queryset(self):
-        return KYC.objects.filter(status="pending").order_by("submitted_at")
-
-# --- ADMIN APPROVE/REJECT ---
-class KYCApproveRejectView(generics.UpdateAPIView):
-    serializer_class = KYCReviewSerializer
-    permission_classes = [permissions.IsAdminUser]
-    queryset = KYC.objects.all()
 
     def perform_update(self, serializer):
         serializer.save(
@@ -657,15 +879,6 @@ def logout(request):
         }, status=status.HTTP_400_BAD_REQUEST)
 
 
-
-
-
-
-
-
-
-
-
 class AuthTokenView(ObtainAuthToken):
     def post(self, request, *args, **kwargs):
         """Override default auth method to to include user object"""
@@ -713,4 +926,446 @@ def index(request):
     """
 
     return render(request, "index.html")
+
+
+# ==================================================
+# TRANSACTION ENGINE VIEWS
+# ==================================================
+
+from .models import (
+    Transaction, 
+    TransactionStatusHistory, 
+    TransactionType, 
+    TransactionStatus,
+    SwapEngine,
+    BankTransfer,
+    MobileMoney,
+    ReceiveCash,
+    KYC,
+    SavedBeneficiary
+)
+from django.db import transaction as db_transaction
+from rest_framework.pagination import PageNumberPagination
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import filters
+
+class TransactionPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+@extend_schema(
+    tags=['Transaction Engine'],
+    summary='Create a new transaction',
+    description='''
+    Create a new transaction of any type (SWAP, BANK_TRANSFER, MOBILE_MONEY, etc.).
+    This endpoint provides unified transaction creation with automatic ID assignment 
+    and comprehensive tracking capabilities.
+    '''
+)
+class TransactionCreateView(APIView):
+    """Create transactions with automatic ID assignment and tracking"""
+    
+    permission_classes = [IsAuthenticated]
+    serializer_class = TransactionCreateSerializer
+    
+    def post(self, request):
+        serializer = TransactionCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        data = serializer.validated_data
+        transaction_type = data['transaction_type']
+        
+        try:
+            with db_transaction.atomic():
+                # Create the main transaction record
+                transaction_obj = Transaction.objects.create(
+                    user=request.user,
+                    transaction_type=transaction_type,
+                    amount_sent=data.get('amount_sent'),
+                    currency_from=data.get('currency_from'),
+                    amount_received=data.get('amount_received'),
+                    currency_to=data.get('currency_to'),
+                    exchange_rate=data.get('exchange_rate'),
+                    metadata=data.get('metadata', {}),
+                    notes=data.get('notes', ''),
+                    ip_address=self.get_client_ip(request),
+                    user_agent=request.META.get('HTTP_USER_AGENT', '')
+                )
+                
+                # Create transaction-specific record based on type
+                specific_transaction = self.create_specific_transaction(
+                    transaction_type, 
+                    data.get('transaction_data', {}), 
+                    transaction_obj,
+                    request.user
+                )
+                
+                # Link the specific transaction to the main transaction
+                self.link_specific_transaction(transaction_obj, specific_transaction, transaction_type)
+                
+                # Create initial status history
+                TransactionStatusHistory.objects.create(
+                    transaction=transaction_obj,
+                    old_status=None,
+                    new_status=TransactionStatus.INITIATED,
+                    changed_by=request.user,
+                    reason='Transaction created'
+                )
+                
+                response_data = {
+                    'transaction_id': transaction_obj.transaction_id,
+                    'id': transaction_obj.id,
+                    'transaction_type': transaction_obj.transaction_type,
+                    'status': transaction_obj.status,
+                    'created_at': transaction_obj.created_at,
+                    'message': f'{transaction_type} transaction created successfully'
+                }
+                
+                if specific_transaction and hasattr(specific_transaction, 'id'):
+                    response_data['specific_transaction_id'] = specific_transaction.id
+                
+                return Response(response_data, status=status.HTTP_201_CREATED)
+                
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to create transaction: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    def create_specific_transaction(self, transaction_type, transaction_data, main_transaction, user):
+        """Create transaction-specific records"""
+        
+        if transaction_type == TransactionType.SWAP:
+            # For swap transactions, we might create a SwapEngine record
+            return SwapEngine.objects.create(
+                currency_from=main_transaction.currency_from or 'USD',
+                currency_to=main_transaction.currency_to or 'UGX',
+                amount_sent=main_transaction.amount_sent or 0,
+                converted_amount=main_transaction.amount_received or 0,
+                exchange_rate=float(main_transaction.exchange_rate or 1),
+                receiver_account_name=transaction_data.get('receiver_account_name', ''),
+                receiver_account_number=transaction_data.get('receiver_account_number', ''),
+                receiver_bank=transaction_data.get('receiver_bank', ''),
+                payment_method=transaction_data.get('payment_method', 'bank_transfer'),
+                verification_mode=transaction_data.get('verification_mode', 'manual'),
+                status='pending'
+            )
+        
+        elif transaction_type == TransactionType.BANK_TRANSFER:
+            return BankTransfer.objects.create(
+                user=user,
+                amount_sent=main_transaction.amount_sent,
+                currency_from=main_transaction.currency_from,
+                amount_received=main_transaction.amount_received,
+                currency_to=main_transaction.currency_to,
+                receiver_account_name=transaction_data.get('receiver_account_name', ''),
+                receiver_account_number=transaction_data.get('receiver_account_number', ''),
+                receiver_bank=transaction_data.get('receiver_bank', ''),
+                bank=transaction_data.get('bank', ''),
+                account_number=transaction_data.get('account_number', ''),
+                account_name=transaction_data.get('account_name', ''),
+                narration=transaction_data.get('narration', ''),
+                status='pending'
+            )
+        
+        elif transaction_type == TransactionType.MOBILE_MONEY:
+            return MobileMoney.objects.create(
+                user=user,
+                amount_sent=main_transaction.amount_sent,
+                currency_from=main_transaction.currency_from,
+                amount_received=main_transaction.amount_received,
+                currency_to=main_transaction.currency_to,
+                receiver_name=transaction_data.get('receiver_name', ''),
+                receiver_number=transaction_data.get('receiver_number', ''),
+                narration=transaction_data.get('narration', ''),
+                status='pending'
+            )
+        
+        elif transaction_type == TransactionType.CASH_PICKUP:
+            return ReceiveCash.objects.create(
+                user=user,
+                amount_sent=main_transaction.amount_sent,
+                currency_from=main_transaction.currency_from,
+                amount_received=main_transaction.amount_received,
+                currency_to=main_transaction.currency_to,
+                receiver_name=transaction_data.get('receiver_name', ''),
+                receiver_IDnumber=transaction_data.get('receiver_id_number', ''),
+                receiver_phone_number=transaction_data.get('receiver_phone', ''),
+                narration=transaction_data.get('narration', ''),
+                status='pending'
+            )
+        
+        return None
+    
+    def link_specific_transaction(self, main_transaction, specific_transaction, transaction_type):
+        """Link specific transaction to main transaction"""
+        if not specific_transaction:
+            return
+            
+        if transaction_type == TransactionType.SWAP:
+            main_transaction.swap_reference = specific_transaction
+        elif transaction_type == TransactionType.BANK_TRANSFER:
+            main_transaction.bank_transfer_reference = specific_transaction
+        elif transaction_type == TransactionType.MOBILE_MONEY:
+            main_transaction.mobile_money_reference = specific_transaction
+        elif transaction_type == TransactionType.CASH_PICKUP:
+            main_transaction.cash_pickup_reference = specific_transaction
+        
+        main_transaction.save()
+    
+    def get_client_ip(self, request):
+        """Get client IP address"""
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(',')[0]
+        else:
+            ip = request.META.get('REMOTE_ADDR')
+        return ip
+
+@extend_schema(
+    tags=['Transaction Engine'],
+    summary='List all transactions',
+    description='''
+    Retrieve a paginated list of all transactions for the authenticated user.
+    Supports filtering by transaction_type, status, and date ranges.
+    '''
+)
+class TransactionListView(generics.ListAPIView):
+    """List transactions with filtering and pagination"""
+    
+    serializer_class = TransactionListSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = TransactionPagination
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['transaction_type', 'status']
+    search_fields = ['transaction_id', 'notes', 'currency_from', 'currency_to']
+    ordering_fields = ['created_at', 'updated_at', 'amount_sent']
+    ordering = ['-created_at']
+    
+    def get_queryset(self):
+        queryset = Transaction.objects.filter(user=self.request.user)
+        
+        # Date range filtering
+        date_from = self.request.query_params.get('date_from')
+        date_to = self.request.query_params.get('date_to')
+        
+        if date_from:
+            queryset = queryset.filter(created_at__date__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(created_at__date__lte=date_to)
+        
+        return queryset
+
+@extend_schema(
+    tags=['Transaction Engine'],
+    summary='Get transaction details',
+    description='Retrieve detailed information about a specific transaction including status history.'
+)
+class TransactionDetailView(generics.RetrieveAPIView):
+    """Get detailed transaction information"""
+    
+    serializer_class = TransactionSerializer
+    permission_classes = [IsAuthenticated]
+    lookup_field = 'transaction_id'
+    
+    def get_queryset(self):
+        return Transaction.objects.filter(user=self.request.user)
+
+@extend_schema(
+    tags=['Transaction Engine'],
+    summary='Update transaction status',
+    description='''
+    Update the status of a transaction. This creates a status history record 
+    for audit purposes and can trigger additional business logic.
+    '''
+)
+class TransactionUpdateStatusView(APIView):
+    """Update transaction status with history tracking"""
+    
+    permission_classes = [IsAuthenticated]
+    serializer_class = TransactionUpdateStatusSerializer
+    
+    def patch(self, request, transaction_id):
+        try:
+            transaction_obj = Transaction.objects.get(
+                transaction_id=transaction_id, 
+                user=request.user
+            )
+        except Transaction.DoesNotExist:
+            return Response(
+                {'error': 'Transaction not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        serializer = TransactionUpdateStatusSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        old_status = transaction_obj.status
+        new_status = serializer.validated_data['status']
+        reason = serializer.validated_data.get('reason', '')
+        notes = serializer.validated_data.get('notes', '')
+        
+        # Update transaction
+        transaction_obj.status = new_status
+        if notes:
+            transaction_obj.notes = f"{transaction_obj.notes or ''}\n{notes}"
+        
+        if new_status == TransactionStatus.COMPLETED:
+            transaction_obj.completed_at = timezone.now()
+        
+        transaction_obj.save()
+        
+        # Create status history
+        TransactionStatusHistory.objects.create(
+            transaction=transaction_obj,
+            old_status=old_status,
+            new_status=new_status,
+            changed_by=request.user,
+            reason=reason
+        )
+        
+        # Update linked specific transaction status if needed
+        self.update_specific_transaction_status(transaction_obj, new_status)
+        
+        return Response({
+            'transaction_id': transaction_obj.transaction_id,
+            'status': transaction_obj.status,
+            'message': f'Transaction status updated from {old_status} to {new_status}'
+        }, status=status.HTTP_200_OK)
+    
+    def update_specific_transaction_status(self, transaction_obj, new_status):
+        """Update status in linked specific transaction records"""
+        status_mapping = {
+            TransactionStatus.COMPLETED: 'verified',
+            TransactionStatus.FAILED: 'failed',
+            TransactionStatus.PENDING: 'pending',
+            TransactionStatus.IN_PROGRESS: 'processing'
+        }
+        
+        mapped_status = status_mapping.get(new_status, 'pending')
+        
+        if transaction_obj.swap_reference:
+            transaction_obj.swap_reference.status = mapped_status
+            transaction_obj.swap_reference.save()
+        
+        if transaction_obj.bank_transfer_reference:
+            transaction_obj.bank_transfer_reference.status = mapped_status
+            transaction_obj.bank_transfer_reference.save()
+        
+        if transaction_obj.mobile_money_reference:
+            transaction_obj.mobile_money_reference.status = mapped_status
+            transaction_obj.mobile_money_reference.save()
+        
+        if transaction_obj.cash_pickup_reference:
+            transaction_obj.cash_pickup_reference.status = mapped_status
+            transaction_obj.cash_pickup_reference.save()
+
+@extend_schema(
+    tags=['Transaction Engine'],
+    summary='Get transaction statistics',
+    description='Get statistics and analytics for user transactions.'
+)
+class TransactionStatsView(APIView):
+    """Get transaction statistics and analytics"""
+    
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        user = request.user
+        queryset = Transaction.objects.filter(user=user)
+        
+        # Basic stats
+        total_transactions = queryset.count()
+        completed_transactions = queryset.filter(status=TransactionStatus.COMPLETED).count()
+        pending_transactions = queryset.filter(status=TransactionStatus.PENDING).count()
+        failed_transactions = queryset.filter(status=TransactionStatus.FAILED).count()
+        
+        # Amount stats
+        from django.db.models import Sum, Avg
+        total_amount_sent = queryset.aggregate(
+            total=Sum('amount_sent')
+        )['total'] or 0
+        
+        average_transaction_amount = queryset.aggregate(
+            avg=Avg('amount_sent')
+        )['avg'] or 0
+        
+        # Transaction type breakdown
+        type_breakdown = {}
+        for choice in TransactionType.choices:
+            type_code, type_name = choice
+            count = queryset.filter(transaction_type=type_code).count()
+            type_breakdown[type_code] = {
+                'name': type_name,
+                'count': count
+            }
+        
+        # Recent activity (last 30 days)
+        from datetime import date, timedelta
+        thirty_days_ago = date.today() - timedelta(days=30)
+        recent_transactions = queryset.filter(created_at__date__gte=thirty_days_ago).count()
+        
+        return Response({
+            'total_transactions': total_transactions,
+            'completed_transactions': completed_transactions,
+            'pending_transactions': pending_transactions,
+            'failed_transactions': failed_transactions,
+            'completion_rate': (completed_transactions / total_transactions * 100) if total_transactions > 0 else 0,
+            'total_amount_sent': str(total_amount_sent),
+            'average_transaction_amount': str(round(average_transaction_amount, 2)),
+            'transaction_type_breakdown': type_breakdown,
+            'recent_activity_30_days': recent_transactions
+        }, status=status.HTTP_200_OK)
+
+@extend_schema(
+    tags=['Transaction Engine'],
+    summary='Search transactions',
+    description='Advanced search functionality for transactions with multiple criteria.'
+)
+class TransactionSearchView(generics.ListAPIView):
+    """Advanced transaction search"""
+    
+    serializer_class = TransactionListSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = TransactionPagination
+    
+    def get_queryset(self):
+        user = self.request.user
+        queryset = Transaction.objects.filter(user=user)
+        
+        # Search parameters
+        transaction_id = self.request.query_params.get('transaction_id')
+        transaction_type = self.request.query_params.get('transaction_type')
+        status_param = self.request.query_params.get('status')
+        currency_from = self.request.query_params.get('currency_from')
+        currency_to = self.request.query_params.get('currency_to')
+        amount_min = self.request.query_params.get('amount_min')
+        amount_max = self.request.query_params.get('amount_max')
+        date_from = self.request.query_params.get('date_from')
+        date_to = self.request.query_params.get('date_to')
+        
+        # Apply filters
+        if transaction_id:
+            queryset = queryset.filter(transaction_id__icontains=transaction_id)
+        if transaction_type:
+            queryset = queryset.filter(transaction_type=transaction_type)
+        if status_param:
+            queryset = queryset.filter(status=status_param)
+        if currency_from:
+            queryset = queryset.filter(currency_from__icontains=currency_from)
+        if currency_to:
+            queryset = queryset.filter(currency_to__icontains=currency_to)
+        if amount_min:
+            queryset = queryset.filter(amount_sent__gte=amount_min)
+        if amount_max:
+            queryset = queryset.filter(amount_sent__lte=amount_max)
+        if date_from:
+            queryset = queryset.filter(created_at__date__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(created_at__date__lte=date_to)
+        
+        return queryset.order_by('-created_at')
 

@@ -19,9 +19,29 @@ from fastest_exchange.views import (
                                     ManualVerifyView,
                                     SavedBeneficiaryView,
                                     KYCSubmissionView,
-                                    KYCReviewQueueView,
-                                    KYCApproveRejectView,
+                                    
+                                    # Transaction Engine views
+                                    TransactionCreateView,
+                                    TransactionListView,
+                                    TransactionDetailView,
+                                    TransactionUpdateStatusView,
+                                    TransactionStatsView,
+                                    TransactionSearchView,
+                                    
+                                    # KYCReviewQueueView,
                                    )
+
+# Exchange Rate Management views
+from fastest_exchange.exchange_rate_views import (
+    get_exchange_rate,
+    calculate_conversion,
+    get_supported_pairs,
+    ExchangeRateManagementView,
+    ExchangeRateListView,
+    get_rate_history,
+    refresh_rates_from_apis,
+    get_rate_service_config,
+)
 app_name = "expense_tracker"
 # Routers provide an easy way of automatically determining the URL conf.
 router = routers.DefaultRouter(trailing_slash=False)
@@ -41,10 +61,37 @@ urlpatterns = [
     path("api/swap", SwapView.as_view(), name="swap"),
     path("api/verify/manual/<int:transaction_id>/", ManualVerifyView.as_view(), name="manual-verify"),
     path("api/saved-beneficiaries/", SavedBeneficiaryView.as_view(), name="saved-beneficiaries"),
-     path("kyc/submit/", KYCSubmissionView.as_view(), name="kyc-submit"),
-    path("kyc/review-queue/", KYCReviewQueueView.as_view(), name="kyc-review-queue"),
-    path("kyc/review/<int:pk>/", KYCApproveRejectView.as_view(), name="kyc-approve-reject"),
-
+    
+    # ==================================================
+    # TRANSACTION ENGINE ENDPOINTS
+    # ==================================================
+    
+    # Core transaction management
+    path("api/transactions/create/", TransactionCreateView.as_view(), name="transaction-create"),
+    path("api/transactions/", TransactionListView.as_view(), name="transaction-list"),
+    path("api/transactions/<str:transaction_id>/", TransactionDetailView.as_view(), name="transaction-detail"),
+    path("api/transactions/<str:transaction_id>/status/", TransactionUpdateStatusView.as_view(), name="transaction-update-status"),
+    
+    # Transaction analytics and search
+    path("api/transactions/stats/", TransactionStatsView.as_view(), name="transaction-stats"),
+    path("api/transactions/search/", TransactionSearchView.as_view(), name="transaction-search"),
+    
+    # ==================================================
+    # EXCHANGE RATE MANAGEMENT ENDPOINTS
+    # ==================================================
+    
+    # Public exchange rate endpoints (anyone can check rates)
+    path("api/exchange-rates/get/", get_exchange_rate, name="get-exchange-rate"),
+    path("api/exchange-rates/convert/", calculate_conversion, name="calculate-conversion"),
+    path("api/exchange-rates/pairs/", get_supported_pairs, name="supported-currency-pairs"),
+    
+    # Admin-only exchange rate management
+    path("api/admin/exchange-rates/update/", ExchangeRateManagementView.as_view(), name="admin-update-rate"),
+    path("api/admin/exchange-rates/list/", ExchangeRateListView.as_view(), name="admin-list-rates"),
+    path("api/admin/exchange-rates/history/", get_rate_history, name="admin-rate-history"),
+    path("api/admin/exchange-rates/refresh/", refresh_rates_from_apis, name="admin-refresh-rates"),
+    path("api/admin/exchange-rates/config/", get_rate_service_config, name="admin-rate-config"),
+    
     # Auth Token generation
     path("api/", include("rest_framework.urls", namespace="rest_framework")),
     path("api/", include(router.urls)),

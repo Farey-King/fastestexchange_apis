@@ -39,8 +39,49 @@ from .models import (
     ReceiveCash,
     SavedBeneficiary,
     KYC,
-   
+    
+    # Transaction Engine models
+    Transaction,
+    TransactionStatusHistory,
+    TransactionType,
+    TransactionStatus,
 )
+
+# Exchange Rate Serializers
+class ExchangeRateSerializer(serializers.ModelSerializer):
+    """Serializer for ExchangeRate model"""
+    
+    class Meta:
+        model = ExchangeRate
+        fields = ['id', 'currency_from', 'currency_to', 'rate', 'low_amount', 
+                 'low_amount_limit', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+class ExchangeRateUpdateSerializer(serializers.Serializer):
+    """Serializer for updating exchange rates"""
+    
+    currency_from = serializers.CharField(max_length=10)
+    currency_to = serializers.CharField(max_length=10)
+    rate = serializers.DecimalField(max_digits=32, decimal_places=19)
+    low_amount = serializers.DecimalField(
+        max_digits=32, decimal_places=8, required=False, allow_null=True
+    )
+    low_amount_limit = serializers.DecimalField(
+        max_digits=32, decimal_places=19, required=False, allow_null=True
+    )
+    
+    def validate_currency_from(self, value):
+        return value.upper()
+    
+    def validate_currency_to(self, value):
+        return value.upper()
+    
+    def validate(self, data):
+        if data['currency_from'] == data['currency_to']:
+            raise serializers.ValidationError(
+                "Source and target currencies cannot be the same"
+            )
+        return data
 
 # serializers.py
 from rest_framework import serializers
@@ -88,10 +129,6 @@ class VerifyOTPSerializer(serializers.Serializer):
             raise serializers.ValidationError("Invalid OTP or phone number.")
 
         return data
-
-    
-    
-
 
 # serializers.py
 class CreatePasswordSerializer(serializers.Serializer):
@@ -150,11 +187,11 @@ class PINSerializer(serializers.Serializer):
             raise serializers.ValidationError("PIN must contain only digits")
         return value
 
-class SwapSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = SwapEngine
-        fields = ['id', 'user', 'from_currency', 'to_currency', 'amount_sent', 'exchange_rate', 'converted_amount', 'status', 'created_at']
-        read_only_fields = ['id', 'user', 'status', 'created_at']
+# class SwapSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = SwapEngine
+#         fields = ['id', 'user', 'from_currency', 'to_currency', 'amount_sent', 'exchange_rate', 'converted_amount', 'payment_method',  'status', 'created_at']
+#         read_only_fields = ['id', 'user', 'status', 'created_at']
 
     def create(self, validated_data):
         validated_data['user'] = self.context['request'].user
@@ -219,7 +256,7 @@ class SwapSerializer(serializers.ModelSerializer):
             "receiver_account_number", "receiver_bank", "converted_amount",
             "payment_method", "verification_mode", "status", "proof_of_payment",
         ]
-        read_only_fields = ["converted_amount","verification_mode","proof_of_payment"]  # hides it from Swagger input
+        read_only_fields = ["converted_amount", "proof_of_payment"]  # hides it from Swagger input
 
     def validate(self, data):
         amount_sent = data.get("amount_sent")
@@ -258,24 +295,6 @@ class KYCSerializer(serializers.ModelSerializer):
         model = KYC
         fields = "__all__"
         read_only_fields = ["status", "submitted_at", "reviewed_at", "reviewed_by"]
-
-class KYCReviewSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = KYC
-        fields = [
-            "id", "user", "document_type", "document_number", "document_file",
-            "status", "admin_notes", "reviewed_by", "reviewed_at"
-        ]
-        read_only_fields = [
-            "id", "user", "document_type", "document_number", "document_file",
-            "reviewed_by", "reviewed_at"
-        ]
-
-        # Here, exchange rate would be fetched dynamically or from request
-        # Example: set it manually for now
-        # validated_data["exchange_rate"] = 1500.50
-
-        # return super().create(validated_data)
     
 class ExchangeRateSerializer(serializers.ModelSerializer):
     class Meta:
@@ -297,9 +316,6 @@ class VerificationCodeSerializer(serializers.Serializer):
 class ApiSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(required=False)
 
-
-
-
 class BaseUserSerializer(ApiSerializer):
    
     class Meta:
@@ -314,14 +330,10 @@ class BaseUserSerializer(ApiSerializer):
             "notification",
         ]
 
-
 class BaseProfileSerializer(ApiSerializer):
     # avatar = serializers.ImageField(use_url=False)
 
     pin = serializers.CharField(write_only=True, required=False)  # Add your pin field
-
-   
-
 
 
 class UserSerializer(BaseUserSerializer):
@@ -350,7 +362,6 @@ class UserSerializer(BaseUserSerializer):
         ]
 
     
-
 class UserRegisterSerializer(UserSerializer):
     profile = BaseProfileSerializer()
     referral_code = serializers.CharField(
@@ -376,7 +387,6 @@ class UserRegisterSerializer(UserSerializer):
             "referral_code",
         ]
         extra_kwargs = {"password": {"write_only": True}}
-
 
 class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
     def __init__(self, *args, **kwargs):
@@ -441,4 +451,162 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
 
         return token
 
+# Transaction Engine Serializers
+class TransactionStatusHistorySerializer(serializers.ModelSerializer):
+    """Serializer for transaction status history"""
+    
+    changed_by_email = serializers.CharField(source='changed_by.email', read_only=True)
+    
+    class Meta:
+        model = TransactionStatusHistory
+        fields = [
+            'id', 'old_status', 'new_status', 'changed_by', 'changed_by_email',
+            'reason', 'timestamp'
+        ]
+        read_only_fields = ['id', 'timestamp', 'changed_by_email']
+
+class TransactionSerializer(serializers.ModelSerializer):
+    """Main Transaction serializer"""
+    
+    user_email = serializers.CharField(source='user.email', read_only=True)
+    status_history = TransactionStatusHistorySerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = Transaction
+        fields = [
+            'id', 'transaction_id', 'user', 'user_email', 'transaction_type', 
+            'status', 'amount_sent', 'currency_from', 'amount_received', 
+            'currency_to', 'exchange_rate', 'swap_reference', 'bank_transfer_reference',
+            'mobile_money_reference', 'cash_pickup_reference', 'kyc_reference',
+            'beneficiary_reference', 'metadata', 'notes', 'created_at', 'updated_at',
+            'completed_at', 'ip_address', 'user_agent', 'status_history'
+        ]
+        read_only_fields = [
+            'id', 'transaction_id', 'user_email', 'created_at', 
+            'updated_at', 'completed_at', 'status_history'
+        ]
+    
+    def create(self, validated_data):
+        """Create a new transaction"""
+        request = self.context.get('request')
+        if request:
+            validated_data['user'] = request.user
+            validated_data['ip_address'] = self.get_client_ip(request)
+            validated_data['user_agent'] = request.META.get('HTTP_USER_AGENT', '')
+        
+        return super().create(validated_data)
+    
+    def get_client_ip(self, request):
+        """Get client IP address"""
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(',')[0]
+        else:
+            ip = request.META.get('REMOTE_ADDR')
+        return ip
+
+class TransactionCreateSerializer(serializers.Serializer):
+    """Serializer for creating different types of transactions"""
+    
+    transaction_type = serializers.ChoiceField(
+        choices=TransactionType.choices,
+        help_text="Type of transaction to create"
+    )
+    
+    # Common fields for financial transactions
+    amount_sent = serializers.DecimalField(
+        max_digits=15, 
+        decimal_places=2, 
+        required=False,
+        help_text="Amount being sent"
+    )
+    currency_from = serializers.CharField(
+        max_length=10, 
+        required=False,
+        help_text="Source currency code"
+    )
+    amount_received = serializers.DecimalField(
+        max_digits=15, 
+        decimal_places=2, 
+        required=False,
+        help_text="Amount to be received"
+    )
+    currency_to = serializers.CharField(
+        max_length=10, 
+        required=False,
+        help_text="Target currency code"
+    )
+    exchange_rate = serializers.DecimalField(
+        max_digits=15, 
+        decimal_places=8, 
+        required=False,
+        help_text="Exchange rate used"
+    )
+    
+    # Transaction-specific data
+    transaction_data = serializers.JSONField(
+        required=False,
+        help_text="Transaction-specific data (varies by transaction type)"
+    )
+    
+    metadata = serializers.JSONField(
+        required=False,
+        help_text="Additional metadata for the transaction"
+    )
+    notes = serializers.CharField(
+        max_length=1000,
+        required=False,
+        help_text="Additional notes for the transaction"
+    )
+    
+    def validate(self, data):
+        transaction_type = data.get('transaction_type')
+        transaction_data = data.get('transaction_data', {})
+        
+        # Validate based on transaction type
+        if transaction_type in [TransactionType.SWAP, TransactionType.BANK_TRANSFER, 
+                               TransactionType.MOBILE_MONEY, TransactionType.CASH_PICKUP]:
+            # Financial transactions require amount and currency info
+            if not data.get('amount_sent'):
+                raise serializers.ValidationError(
+                    "amount_sent is required for financial transactions"
+                )
+            if not data.get('currency_from'):
+                raise serializers.ValidationError(
+                    "currency_from is required for financial transactions"
+                )
+        
+        return data
+
+class TransactionUpdateStatusSerializer(serializers.Serializer):
+    """Serializer for updating transaction status"""
+    
+    status = serializers.ChoiceField(
+        choices=TransactionStatus.choices,
+        help_text="New status for the transaction"
+    )
+    reason = serializers.CharField(
+        max_length=500,
+        required=False,
+        help_text="Reason for status change"
+    )
+    notes = serializers.CharField(
+        max_length=1000,
+        required=False,
+        help_text="Additional notes"
+    )
+
+class TransactionListSerializer(serializers.ModelSerializer):
+    """Simplified serializer for transaction lists"""
+    
+    user_email = serializers.CharField(source='user.email', read_only=True)
+    
+    class Meta:
+        model = Transaction
+        fields = [
+            'transaction_id', 'user_email', 'transaction_type', 'status',
+            'amount_sent', 'currency_from', 'amount_received', 'currency_to',
+            'created_at', 'updated_at', 'completed_at'
+        ]
+        read_only_fields = fields
 

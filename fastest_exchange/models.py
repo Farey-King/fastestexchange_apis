@@ -145,7 +145,7 @@ class SavedBeneficiary(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name="transactions"
+        related_name="saved_beneficiaries"
     )
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     exchange_rate = models.DecimalField(max_digits=10, decimal_places=4)
@@ -172,35 +172,6 @@ class SavedBeneficiary(models.Model):
         return f"Transaction {self.id} - {self.status}"
 
 
-class KYC(models.Model):
-    STATUS_CHOICES = [
-        ("pending", "Pending"),
-        ("approved", "Approved"),
-        ("rejected", "Rejected"),
-    ]
-
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name="kyc_submissions"
-    )
-    document_type = models.CharField(max_length=50)  # e.g., passport, ID card
-    document_number = models.CharField(max_length=100)
-    document_file = models.FileField(upload_to="kyc_documents/")
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="pending")
-    submitted_at = models.DateTimeField(auto_now_add=True)
-    reviewed_at = models.DateTimeField(blank=True, null=True)
-    reviewed_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        blank=True,
-        null=True,
-        related_name="kyc_reviews"
-    )
-    review_notes = models.TextField(blank=True, null=True)
-
-    def __str__(self):
-        return f"KYC for {self.user} - {self.status}"
 
 class UserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra_fields):
@@ -760,13 +731,21 @@ class DocumentStatus(models.TextChoices):
 
 
 class KYC(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+    ]
+    
     bvn_verified = models.BooleanField(default=False)
     email_verified = models.BooleanField(default=False)
     phone_number_verified = models.BooleanField(default=False)
     national_identity_verified = models.BooleanField(default=False)
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="kyc")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     submitted_at = models.DateTimeField(auto_now_add=True)
     reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='kyc_reviews')
     reviewer_notes = models.TextField(null=True, blank=True)
 
     def __str__(self):
@@ -873,3 +852,196 @@ class Reward(models.Model):
         return f"{self.user.username} - {self.points} points"
 
 # Create your models here.
+
+# Transaction Engine Models
+class TransactionType(models.TextChoices):
+    SWAP = "SWAP", "Currency Swap"
+    BANK_TRANSFER = "BANK_TRANSFER", "Bank Transfer"
+    MOBILE_MONEY = "MOBILE_MONEY", "Mobile Money"
+    CASH_PICKUP = "CASH_PICKUP", "Cash Pickup"
+    KYC_SUBMISSION = "KYC_SUBMISSION", "KYC Submission"
+    BENEFICIARY_MANAGEMENT = "BENEFICIARY_MANAGEMENT", "Beneficiary Management"
+
+class TransactionStatus(models.TextChoices):
+    INITIATED = "INITIATED", "Initiated"
+    PENDING = "PENDING", "Pending"
+    IN_PROGRESS = "IN_PROGRESS", "In Progress"
+    COMPLETED = "COMPLETED", "Completed"
+    FAILED = "FAILED", "Failed"
+    CANCELLED = "CANCELLED", "Cancelled"
+    REQUIRES_VERIFICATION = "REQUIRES_VERIFICATION", "Requires Verification"
+    VERIFIED = "VERIFIED", "Verified"
+
+class Transaction(models.Model):
+    """Core Transaction model for tracking all transactions in the system"""
+    
+    # Unique transaction identifier
+    transaction_id = models.CharField(max_length=32, unique=True, db_index=True)
+    
+    # User who initiated the transaction
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.CASCADE, 
+        related_name='transactions'
+    )
+    
+    # Transaction details
+    transaction_type = models.CharField(
+        max_length=30, 
+        choices=TransactionType.choices
+    )
+    status = models.CharField(
+        max_length=25, 
+        choices=TransactionStatus.choices, 
+        default=TransactionStatus.INITIATED
+    )
+    
+    # Financial details
+    amount_sent = models.DecimalField(
+        max_digits=15, 
+        decimal_places=2, 
+        null=True, 
+        blank=True
+    )
+    currency_from = models.CharField(max_length=10, blank=True, null=True)
+    amount_received = models.DecimalField(
+        max_digits=15, 
+        decimal_places=2, 
+        null=True, 
+        blank=True
+    )
+    currency_to = models.CharField(max_length=10, blank=True, null=True)
+    exchange_rate = models.DecimalField(
+        max_digits=15, 
+        decimal_places=8, 
+        null=True, 
+        blank=True
+    )
+    
+    # Reference to specific transaction models
+    swap_reference = models.ForeignKey(
+        'SwapEngine', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True
+    )
+    bank_transfer_reference = models.ForeignKey(
+        'BankTransfer', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True
+    )
+    mobile_money_reference = models.ForeignKey(
+        'MobileMoney', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True
+    )
+    cash_pickup_reference = models.ForeignKey(
+        'ReceiveCash', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True
+    )
+    kyc_reference = models.ForeignKey(
+        'KYC', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True
+    )
+    beneficiary_reference = models.ForeignKey(
+        'SavedBeneficiary', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True
+    )
+    
+    # Metadata
+    metadata = models.JSONField(default=dict, blank=True)
+    notes = models.TextField(blank=True, null=True)
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    
+    # Tracking fields
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True, null=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['transaction_id']),
+            models.Index(fields=['user', '-created_at']),
+            models.Index(fields=['status']),
+            models.Index(fields=['transaction_type']),
+        ]
+    
+    def __str__(self):
+        return f"{self.transaction_id} - {self.transaction_type} - {self.status}"
+    
+    def save(self, *args, **kwargs):
+        if not self.transaction_id:
+            self.transaction_id = self.generate_transaction_id()
+        super().save(*args, **kwargs)
+    
+    def generate_transaction_id(self):
+        """Generate a unique transaction ID"""
+        import uuid
+        import time
+        
+        # Format: TXN + timestamp + random
+        timestamp = str(int(time.time()))[-8:]  # Last 8 digits of timestamp
+        random_part = str(uuid.uuid4()).replace('-', '')[:8].upper()
+        return f"TXN{timestamp}{random_part}"
+    
+    def mark_completed(self):
+        """Mark transaction as completed"""
+        self.status = TransactionStatus.COMPLETED
+        self.completed_at = timezone.now()
+        self.save()
+    
+    def mark_failed(self, reason=None):
+        """Mark transaction as failed"""
+        self.status = TransactionStatus.FAILED
+        if reason:
+            self.notes = f"{self.notes or ''}\nFailed: {reason}"
+        self.save()
+
+class TransactionStatusHistory(models.Model):
+    """Track status changes for transactions"""
+    
+    transaction = models.ForeignKey(
+        Transaction, 
+        on_delete=models.CASCADE, 
+        related_name='status_history'
+    )
+    
+    old_status = models.CharField(
+        max_length=25, 
+        choices=TransactionStatus.choices,
+        null=True,
+        blank=True
+    )
+    new_status = models.CharField(
+        max_length=25, 
+        choices=TransactionStatus.choices
+    )
+    
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True
+    )
+    
+    reason = models.TextField(blank=True, null=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-timestamp']
+        verbose_name_plural = "Transaction Status Histories"
+    
+    def __str__(self):
+        return f"{self.transaction.transaction_id}: {self.old_status} → {self.new_status}"
