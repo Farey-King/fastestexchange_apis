@@ -16,7 +16,7 @@ from drf_spectacular.utils import extend_schema, OpenApiParameter
 from drf_spectacular.openapi import OpenApiTypes
 
 from .models import ExchangeRate, Currency
-from .exchange_rate_service import ExchangeRateService
+from .quidax_exchange_service import QuidaxExchangeRateService
 from .serializers import ExchangeRateSerializer, ExchangeRateUpdateSerializer
 import logging
 
@@ -58,7 +58,7 @@ def get_exchange_rate(request):
             }, status=status.HTTP_400_BAD_REQUEST)
     
     try:
-        rate_info = ExchangeRateService.get_exchange_rate(
+        rate_info = QuidaxExchangeRateService.get_exchange_rate(
             from_currency=from_currency,
             to_currency=to_currency,
             amount=amount
@@ -117,7 +117,7 @@ def calculate_conversion(request):
         }, status=status.HTTP_400_BAD_REQUEST)
     
     try:
-        conversion_result = ExchangeRateService.calculate_conversion(
+        conversion_result = QuidaxExchangeRateService.calculate_conversion(
             from_currency=from_currency,
             to_currency=to_currency,
             amount=amount
@@ -147,7 +147,7 @@ def get_supported_pairs(request):
     Get list of supported currency pairs
     """
     try:
-        pairs = ExchangeRateService.get_supported_currency_pairs()
+        pairs = QuidaxExchangeRateService.get_supported_currency_pairs()
         return Response({
             'supported_pairs': pairs,
             'total_pairs': len(pairs)
@@ -181,7 +181,7 @@ class ExchangeRateManagementView(APIView):
         data = serializer.validated_data
         
         try:
-            exchange_rate = ExchangeRateService.update_exchange_rate(
+            exchange_rate = QuidaxExchangeRateService.update_exchange_rate(
                 from_currency=data['currency_from'],
                 to_currency=data['currency_to'],
                 rate=data['rate'],
@@ -308,15 +308,15 @@ def refresh_rates_from_apis(request):
         
         for from_currency, to_currency in pairs_to_refresh:
             # Clear cache for this pair
-            cache_key = f"exchange_rate_{from_currency}_{to_currency}"
+            cache_key = f"quidax_rate_{from_currency}_{to_currency}"
             cache.delete(cache_key)
             
-            # Try to fetch fresh rate from APIs
-            api_rate = ExchangeRateService._fetch_external_rate(from_currency, to_currency)
+            # Try to fetch fresh rate from Quidax API
+            api_rate = QuidaxExchangeRateService._fetch_quidax_rate(from_currency, to_currency)
             
             if api_rate and 'error' not in api_rate:
                 # Update database with fresh rate
-                rate_obj = ExchangeRateService.update_exchange_rate(
+                rate_obj = QuidaxExchangeRateService.update_exchange_rate(
                     from_currency=from_currency,
                     to_currency=to_currency,
                     rate=Decimal(str(api_rate['rate']))
@@ -359,25 +359,81 @@ def get_rate_service_config(request):
     """
     try:
         config = {
-            'cache_timeout': ExchangeRateService.CACHE_TIMEOUT,
-            'fallback_cache_timeout': ExchangeRateService.FALLBACK_CACHE_TIMEOUT,
-            'enabled_apis': [],
-            'default_margins': ExchangeRateService.DEFAULT_MARGINS
+            'cache_timeout': QuidaxExchangeRateService.CACHE_TIMEOUT,
+            'fallback_cache_timeout': QuidaxExchangeRateService.FALLBACK_CACHE_TIMEOUT,
+            'service_provider': 'quidax',
+            'base_url': QuidaxExchangeRateService.BASE_URL,
+            'api_configured': bool(QuidaxExchangeRateService.API_KEY),
+            'sandbox_mode': QuidaxExchangeRateService.SANDBOX_MODE,
+            'default_margins': QuidaxExchangeRateService.DEFAULT_MARGINS
         }
-        
-        # Check which APIs are enabled
-        for api_name, api_config in ExchangeRateService.EXCHANGE_APIS.items():
-            config['enabled_apis'].append({
-                'name': api_name,
-                'enabled': api_config['enabled'] and bool(api_config['key']),
-                'url': api_config['url'],
-                'has_key': bool(api_config['key'])
-            })
         
         return Response(config, status=status.HTTP_200_OK)
         
     except Exception as e:
         logger.error(f"Error getting service config: {e}")
+        return Response({
+            'error': 'Internal server error'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@extend_schema(
+    tags=['Quidax Integration'],
+    summary='Get Quidax markets',
+    description='Get all available markets from Quidax'
+)
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def get_quidax_markets(request):
+    """
+    Get all available markets from Quidax
+    """
+    try:
+        markets_data = QuidaxExchangeRateService.get_quidax_markets()
+        
+        if 'error' in markets_data:
+            return Response(markets_data, status=status.HTTP_400_BAD_REQUEST)
+        
+        return Response(markets_data, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"Error getting Quidax markets: {e}")
+        return Response({
+            'error': 'Internal server error'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@extend_schema(
+    tags=['Quidax Integration'],
+    summary='Get market ticker',
+    description='Get ticker data for a specific Quidax market',
+    parameters=[
+        OpenApiParameter('market', OpenApiTypes.STR, description='Market symbol (e.g., BTCNGN, USDTNGN)')
+    ]
+)
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def get_market_ticker(request):
+    """
+    Get ticker data for a specific market
+    """
+    market = request.query_params.get('market', '').upper()
+    
+    if not market:
+        return Response({
+            'error': 'Market parameter is required'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        ticker_data = QuidaxExchangeRateService.get_market_ticker(market)
+        
+        if 'error' in ticker_data:
+            return Response(ticker_data, status=status.HTTP_400_BAD_REQUEST)
+        
+        return Response(ticker_data, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"Error getting market ticker: {e}")
         return Response({
             'error': 'Internal server error'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

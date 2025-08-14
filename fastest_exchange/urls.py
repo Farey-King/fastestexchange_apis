@@ -41,6 +41,8 @@ from fastest_exchange.exchange_rate_views import (
     get_rate_history,
     refresh_rates_from_apis,
     get_rate_service_config,
+    get_quidax_markets,
+    get_market_ticker,
 )
 app_name = "expense_tracker"
 # Routers provide an easy way of automatically determining the URL conf.
@@ -91,6 +93,10 @@ urlpatterns = [
     path("api/admin/exchange-rates/history/", get_rate_history, name="admin-rate-history"),
     path("api/admin/exchange-rates/refresh/", refresh_rates_from_apis, name="admin-refresh-rates"),
     path("api/admin/exchange-rates/config/", get_rate_service_config, name="admin-rate-config"),
+    
+    # Quidax-specific endpoints
+    path("api/quidax/markets/", get_quidax_markets, name="quidax-markets"),
+    path("api/quidax/ticker/", get_market_ticker, name="quidax-ticker"),
     
     # Auth Token generation
     path("api/", include("rest_framework.urls", namespace="rest_framework")),

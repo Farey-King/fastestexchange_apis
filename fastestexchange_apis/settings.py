@@ -262,3 +262,9 @@ FLUTTERWAVE_SECRET_KEY = os.environ.get("FLUTTERWAVE_SECRET_KEY")    # Bearer fo
 # Paystack
 PAYSTACK_SECRET_KEY = os.environ.get("PAYSTACK_SECRET_KEY")          # Bearer for API verify
 # paystack uses header "x-paystack-signature" (HMAC SHA512 of request.body using PAYSTACK_SECRET_KEY)
+
+# Quidax API Configuration
+QUIDAX_API_KEY = env("QUIDAX_API_KEY", default="")
+QUIDAX_SECRET_KEY = env("QUIDAX_SECRET_KEY", default="")
+QUIDAX_BASE_URL = env("QUIDAX_BASE_URL", default="https://www.quidax.com/api/v1")
+QUIDAX_SANDBOX_MODE = env.bool("QUIDAX_SANDBOX_MODE", default=True)
