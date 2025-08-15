@@ -174,12 +174,12 @@ MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/media/"
 # ------------------------------------------------
 
 # Email Backend Configuration
-if DEBUG:
+
     # For development, use console backend to see emails in console
-    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-else:
+# EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+
     # For production, use SMTP
-    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 
 # SMTP Configuration (ZeptoMail)
 EMAIL_HOST = env("EMAIL_HOST", default="smtp.zeptomail.com")

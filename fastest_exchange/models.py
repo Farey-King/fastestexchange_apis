@@ -3,10 +3,10 @@ import os
 from random import choice
 from turtle import mode
 import datetime
-from django.contrib.auth.models import AbstractUser, PermissionsMixin,BaseUserManager
+from django.contrib.auth.models import AbstractUser, PermissionsMixin, BaseUserManager, AbstractBaseUser
 from django.contrib.auth.hashers import make_password, check_password
 
-from django.db import models, transaction
+from django.db import models
 from django.dispatch import receiver
 from django.utils import timezone
 from django.utils.translation import gettext, gettext_lazy as _
@@ -21,7 +21,7 @@ from django.contrib.auth import get_user_model
 
 
 
-
+# Removed duplicate User model definition at the top. The concrete User model is defined below with UserManager.
 
 class Signup(models.Model):
     email = models.EmailField(unique=True)
@@ -196,15 +196,15 @@ class UserManager(BaseUserManager):
 
 class User(AbstractUser, PermissionsMixin):
     username = None
-    email = models.EmailField(unique=True)
+    email = models.EmailField(unique=True,blank=True, null=True)
     phone_number = models.CharField(
         max_length=15,
         validators=[RegexValidator(regex=r'^\+?1?\d{9,15}$', message="Phone number must be entered in the format: '+999999999'. Up to 15 digits allowed.")],
         blank=True,
         null=True
     )
-    is_email_verified = models.BooleanField(default=False)
-    is_phone_verified = models.BooleanField(default=False)
+    is_email_verified = models.BooleanField(default=False,blank=True, null=True)
+    is_phone_verified = models.BooleanField(default=False,blank=True, null=True)
     pin = models.CharField(max_length=255, blank=True, null=True)  # Store hashed PIN
     pin_attempts = models.IntegerField(default=0)
     pin_locked_until = models.DateTimeField(blank=True, null=True)
@@ -212,8 +212,7 @@ class User(AbstractUser, PermissionsMixin):
     otp_created_at = models.DateTimeField(blank=True, null=True)  # OTP timestamp
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
-    # Fix the conflicts by adding related_name
+
     groups = models.ManyToManyField(
         'auth.Group',
         verbose_name='groups',
@@ -236,45 +235,8 @@ class User(AbstractUser, PermissionsMixin):
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = []
 
-    
-
-class Swap(models.Model):
-    # user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    from_currency = models.CharField(max_length=10)
-    to_currency = models.CharField(max_length=10)
-    amount_sent = models.DecimalField(max_digits=12, decimal_places=2)
-    exchange_rate = models.DecimalField(max_digits=12, decimal_places=2)
-    converted_amount = models.DecimalField(max_digits=12, decimal_places=2)
-    # created_at = models.DateTimeField(auto_now_add=True)
-
-
-class AccountSettings(models.Model):
-    user = models.OneToOneField(CompleteSignup, on_delete=models.CASCADE)
-    phone = models.CharField(max_length=30, blank=True, null=True)
-    country = models.CharField(max_length=100, blank=True, null=True)
-    city_state = models.CharField(max_length=255, blank=True, null=True)
-    postal_code = models.CharField(max_length=20, blank=True, null=True)
-    tax_id = models.CharField(max_length=50, blank=True, null=True)
-
     def __str__(self):
-        return f"{self.user.email} Account Settings"
-
-class DeliveryMethod(models.Model):
-    METHOD_CHOICES = [
-        ('bank_transfer', 'Bank Transfer'),
-        ('mobile_money', 'Mobile Money'),
-        ('cash', 'Cash Pickup'),
-    ]
-    method = models.CharField(max_length=50, choices=METHOD_CHOICES, unique=True)
-    name = models.CharField(max_length=100)
-
-class PayoutDetail(models.Model):
-    swap = models.ForeignKey(Swap, on_delete=models.CASCADE, related_name='payout_details')
-    method = models.CharField(max_length=50)  # bank_transfer, mobile_money, cash
-    details = models.JSONField()
-
-# class Referral(models.Model):
-#     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+        return self.email
 #     code = models.CharField(max_length=10, unique=True)
 #     referred_users = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='referred_by')
 #     bonus_earned = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -325,7 +287,7 @@ class CreateOnlyModel(models.Model):
     )
 
     class Meta:
-        abstract = True
+        
         ordering = ("-id",)
         get_latest_by = "created_at"
 
@@ -340,27 +302,9 @@ class EditableModel(CreateOnlyModel):
         related_name="%(class)s_updated_by",
     )
 
-    class Meta:
-        abstract = True
+    
 
 
-class AcceptableModel(CreateOnlyModel):
-    accepted_at = models.DateTimeField(blank=True, null=True)
-    accepted_by = models.ForeignKey(
-        "User",
-        on_delete=models.SET_NULL,
-        blank=True,
-        null=True,
-        related_name="%(class)s_accepted_by",
-    )
-
-    class Meta:
-        abstract = True
-
-
-
-    def check_pin(self, pin):
-        return self.profile.pin == pin
 
 
 def get_media_upload_path(instance, filename):
@@ -452,7 +396,7 @@ class Person(EditableModel):
     city = models.CharField(max_length=50)
     country = models.CharField(max_length=2)
 
-    class Meta(EditableModel.Meta):
+    class Meta:
         abstract = True
 
 
@@ -473,8 +417,7 @@ class Notification(models.Model):
 
 
 class ClientAccount(EditableModel):
-    id = models.IntegerField(primary_key=True)
-    owner = models.OneToOneField(User, related_name="account", on_delete=models.CASCADE)
+    owner = models.OneToOneField(User, related_name="account", on_delete=models.CASCADE,blank=True, null=True)
 
     def __str__(self):
         return "Acoount: %s %s " % (self.owner.first_name, self.owner.last_name)
@@ -489,11 +432,12 @@ class AccountType(models.TextChoices):
 
 class PaymentMethod(EditableModel):
 
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=255,blank=True, null=True)
     type = models.CharField(choices=AccountType.choices, max_length=50)
 
     def __str__(self):
         return "PaymentMethod: %s" % (self.name.first_name)
+
 
 
 class Beneficiary(Person):
@@ -512,50 +456,13 @@ class Beneficiary(Person):
     country = models.CharField(max_length=2)
 
     def __str__(self):
-        return "Account: %s %s " % (self.owner.first_name, self.owner.last_name)
-
-
-# class Client(Person):
-#     """Client Account"""
-
-#     receive_price_update = models.BooleanField(default=False)
-
-#     def __str__(self):
-#         return "%s %s" % (self.first_name, self.last_name)
-
-#     class Meta:
-#         indexes = [
-#             models.Index(
-#                 fields=["receive_price_update"],
-#                 name="receive_price_update_idx",
-#                 condition=models.Q(receive_price_update=True),
-#             ),
-#         ]
-
+        return "Beneficiary: %s" % (self.name)
 
 class Currency(models.TextChoices):
     BWP = "BWP"
     RMB = "RMB"
     ETB = "ETB"
     GHC = "GHC"
-    KES = "KES"
-    MWK = "MWK"
-    NAD = "NAD"
-    NGN = "NGN"
-    RWF = "RWF"
-    ZAR = "ZAR"
-    SSP = "SSP"
-    TZS = "TZS"
-    UGX = "UGX"
-    AED = "AED"
-    GBP = "GBP"
-    USD = "USD"
-    XAF = "XAF"
-    BTC = "BTC"
-    USDT = "USDT"
-    USDC = "USDC"
-
-
 class OperatingAccount(EditableModel):
     class Type(models.IntegerChoices):
         BANK = 1
@@ -564,9 +471,9 @@ class OperatingAccount(EditableModel):
         CASH = 4
 
     name = models.CharField(max_length=20, null=True, blank=True)
-    type = models.IntegerField(choices=Type.choices)
-    currency = models.CharField(choices=Currency.choices, max_length=5)
-    office = models.ForeignKey(Office, on_delete=models.PROTECT)
+    type = models.IntegerField(choices=Type.choices,blank=True, null=True)
+    currency = models.CharField(choices=Currency.choices, max_length=5,blank=True, null=True)
+    office = models.ForeignKey(Office, on_delete=models.PROTECT,blank=True, null=True)
     # balance = models.DecimalField(max_digits=20, decimal_places=8, default=0)
 
     # @property
@@ -598,18 +505,27 @@ class OperatingAccount(EditableModel):
 
 class ExchangeRate(models.Model):
     currency_from = models.CharField(choices=Currency.choices, max_length=10)
-    currency_to = models.CharField(choices=Currency.choices, max_length=10)
-    low_amount = models.DecimalField(
-        max_digits=32, decimal_places=8, null=True, blank=True
-    )
-    low_amount_limit = models.DecimalField(
-        max_digits=32, decimal_places=19, null=True, blank=True
-    )
-    rate = models.DecimalField(max_digits=32, decimal_places=19)
-    created_at = models.DateTimeField(auto_now_add=True)
-    
-    # updated_at = models.DateTimeField(auto_now=True)
+class OperatingAccount(EditableModel):
+    class Type(models.IntegerChoices):
+        BANK = 1
+class ExchangeRate(models.Model):
+    class Type(models.IntegerChoices):
+        BANK = 1
+        MOBILE_PAYMENT = 2
+        CRYPTO = 3
+        CASH = 4
 
+    currency_from = models.CharField(choices=Currency.choices, max_length=10)
+    currency_to = models.CharField(choices=Currency.choices, max_length=10)
+    rate = models.DecimalField(max_digits=20, decimal_places=8)
+    low_amount = models.DecimalField(max_digits=20, decimal_places=2, default=0)
+    low_amount_limit = models.DecimalField(max_digits=20, decimal_places=2, default=0)
+
+    name = models.CharField(max_length=20, null=True, blank=True)
+    type = models.IntegerField(choices=Type.choices)
+    currency = models.CharField(choices=Currency.choices, max_length=5)
+    # Remove office field to avoid clash with EditableModel
+    # balance = models.DecimalField(max_digits=20, decimal_places=8, default=0)
     def __str__(self) -> str:
         return "%s to %s @%.2f" % (self.currency_from, self.currency_to, self.rate)
 
@@ -787,7 +703,7 @@ class IdentityDocument(models.Model):
         return f"{self.document_type} for {self.kyc.user.username}"
 
 
-class Request(AcceptableModel):
+class Request(models.Model):
     class ModelType(models.IntegerChoices):
         TRANSACTION = 1
         CLIENT = 2

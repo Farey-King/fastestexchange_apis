@@ -5,6 +5,7 @@ from django.contrib.auth.forms import UserChangeForm, UserCreationForm
 from django.utils.translation import gettext_lazy as _
 
 from .models import (
+    EditableModel,
     VerificationCode,
     BankTransfer,
     ReceiveCash,
@@ -61,12 +62,20 @@ class GandariaUserAdmin(BaseUserAdmin):
     search_fields = ('email', 'first_name', 'last_name')
     ordering = ('email',)
 
-# ✅ Make sure it’s not double-registered
-try:
-    admin.site.unregister(User)
-except admin.sites.NotRegistered:
-    pass
+# # ✅ Make sure it’s not double-registered
+# try:
 
+
+#     admin.site.unregister(User)
+
+    
+# except admin.sites.NotRegistered:
+#     pass
+
+# ✅ Register the custom user admin
+# @admin.register(User)
+# class GandariaUserAdmin(BaseUserAdmin):
+#     pass
 # admin.site.register(User, GandariaUserAdmin)
 
 
@@ -148,6 +157,9 @@ admin.site.register(Login)
 admin.site.register(PhoneNumber)
 admin.site.register(SavedBeneficiary)
 admin.site.register(KYC)
+admin.site.register(User, GandariaUserAdmin)  # Register the custom user admin
+admin.site.register(EditableModel)
+# admin.site.register(User)
 # admin.site.register(SwapEngine)
 @admin.register(SwapEngine)
 class SwapEngineAdmin(admin.ModelAdmin):

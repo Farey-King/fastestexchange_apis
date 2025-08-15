@@ -23,10 +23,39 @@ venv/
 # Windows files
 Thumbs.db
 
-# Env files
+# Env files - ALL environment files
 .env
+.env.*
 .env.local
 .env.*.local
+.env.production
+.env.development
+.env.staging
+*.env
+env/
+
+# Secrets and sensitive files
+secrets/
+secrets.json
+secret_key.txt
+passwords.txt
+keys/
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Config files that might contain secrets
+config/local.py
+config/production.py
+local_settings.py
+secret_settings.py
+
+# Backup files
+*.bak
+*.backup
+*.old
+*~
 
 # PyCharm / JetBrains IDE
 .idea/

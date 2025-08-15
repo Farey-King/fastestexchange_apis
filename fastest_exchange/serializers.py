@@ -27,8 +27,8 @@ from .models import (
     CreatePassword,
     CreatePin,
     SwapEngine,
-    DeliveryMethod,
-    PayoutDetail, 
+    
+    
     # Referral,
     ExchangeRate,
     Login,  # Import for Login model
