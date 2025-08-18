@@ -647,17 +647,24 @@ class DocumentStatus(models.TextChoices):
 
 
 class KYC(models.Model):
+    COUNTRY_CHOICES = [("NG", "Nigeria"), ("UG", "Uganda")]
+    DOC_TYPES = [
+        ("NIN", "National ID Number"),
+        ("DL", "DriversLicence"),
+        ("PASSPORT", "Passport"),
+        ("PVC", "VotersCard"),
+    ]
+
     STATUS_CHOICES = [
         ('pending', 'Pending'),
         ('approved', 'Approved'),
         ('rejected', 'Rejected'),
     ]
     
-    bvn_verified = models.BooleanField(default=False)
-    email_verified = models.BooleanField(default=False)
-    phone_number_verified = models.BooleanField(default=False)
-    national_identity_verified = models.BooleanField(default=False)
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="kyc")
+    country = models.CharField(max_length=2, choices=COUNTRY_CHOICES, default='NG')
+    doc_type = models.CharField(max_length=20, choices=DOC_TYPES, default='NIN')
+    doc_number = models.CharField(max_length=50, unique=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     submitted_at = models.DateTimeField(auto_now_add=True)
     reviewed_at = models.DateTimeField(null=True, blank=True)
