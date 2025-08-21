@@ -24,6 +24,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.request import Request 
 from rest_framework.response import Response 
 from rest_framework.views import APIView 
+from rest_framework import viewsets
 from rest_framework_simplejwt.views import InvalidToken, TokenError, TokenObtainPairView 
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.hashers import make_password, check_password 
@@ -59,7 +60,7 @@ from .models import (
     PhoneNumber,  # Added import for PhoneNumber
     SwapEngine,
     SavedBeneficiary,  # Added import for SavedBeneficiary
-    KYC,
+    KYCDocument,  # Added import for KYCDocument
 )
 
 from .serializers import (
@@ -81,8 +82,8 @@ from .serializers import (
     VerifyOTPSerializer,  # Added import for VerifyOTPSerializer
     SwapSerializer,  # Added import for SwapSerializer
     SavedBeneficiarySerializer,  # Added import for SavedBeneficiarySerializer
-    KYCSerializer,  # Added import for KYCSerializer
-    
+    KYCDocumentSerializer,  # Added import for KYCDocumentSerializer
+    KYCVerificationSerializer,  # Added import for KYCVerificationSerializer
     # Transaction Engine serializers
     TransactionSerializer,
     TransactionCreateSerializer,
@@ -417,6 +418,65 @@ class LoginView(APIView):
             "message": "Login successful."
         }, status=status.HTTP_200_OK)
 
+class KYCViewSet(viewsets.ModelViewSet):
+    serializer_class = KYCDocumentSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        return KYCDocument.objects.filter(user=self.request.user)
+    
+    @action(detail=False, methods=['post'])
+    def verify(self, request):
+        serializer = KYCVerificationSerializer(data=request.data)
+        
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Verify document with Prembly
+            response = serializer.verify()
+            
+            # Determine verification status
+            status_code = response.get('status', '')
+            is_verified = status_code == 'verified' or response.get('verified', False)
+            
+            # Create or update KYC document record
+            kyc_doc, created = KYCDocument.objects.update_or_create(
+                user=request.user,
+                document_type=serializer.validated_data['document_type'],
+                country=serializer.validated_data['country'],
+                defaults={
+                    'document_number': serializer.validated_data['document_number'],
+                    'first_name': serializer.validated_data.get('first_name', ''),
+                    'last_name': serializer.validated_data.get('last_name', ''),
+                    'date_of_birth': serializer.validated_data.get('date_of_birth'),
+                    'verification_id': response.get('verification_id', ''),
+                    'status': 'verified' if is_verified else 'failed',
+                    'raw_response': response,
+                    'verified_at': timezone.now() if is_verified else None
+                }
+            )
+            
+            result_serializer = KYCDocumentSerializer(kyc_doc)
+            return Response({
+                'kyc_document': result_serializer.data,
+                'verification_response': response
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': str(e)}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+    
+    @action(detail=True, methods=['get'])
+    def status(self, request, pk=None):
+        kyc_doc = self.get_object()
+        return Response({
+            'status': kyc_doc.status,
+            'verified_at': kyc_doc.verified_at,
+            'raw_response': kyc_doc.raw_response
+        })
 
 @method_decorator(csrf_exempt, name='dispatch')
 class SwapView(APIView):
@@ -700,9 +760,6 @@ class SavedBeneficiaryDetailView(generics.RetrieveUpdateDestroyAPIView):
         return SavedBeneficiary.objects.filter(user=self.request.user)
     
 # --- USER SUBMITS KYC ---
-class KYCSubmissionView(generics.CreateAPIView):
-    serializer_class = KYCSerializer
-    permission_classes = [permissions.IsAuthenticated]
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
@@ -941,7 +998,7 @@ from .models import (
     BankTransfer,
     MobileMoney,
     ReceiveCash,
-    KYC,
+    
     SavedBeneficiary
 )
 from django.db import transaction as db_transaction

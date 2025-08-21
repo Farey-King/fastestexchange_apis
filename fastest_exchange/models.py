@@ -25,7 +25,7 @@ from django.contrib.auth import get_user_model
 
 class Signup(models.Model):
     email = models.EmailField(unique=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    # created_at = models.DateTimeField(auto_now_add=True, default=timezone.now)
 
     def __str__(self):
         return self.email
@@ -287,7 +287,7 @@ class CreateOnlyModel(models.Model):
     )
 
     class Meta:
-        
+        abstract = True
         ordering = ("-id",)
         get_latest_by = "created_at"
 
@@ -302,7 +302,8 @@ class EditableModel(CreateOnlyModel):
         related_name="%(class)s_updated_by",
     )
 
-    
+    class Meta:
+        abstract = True
 
 
 
@@ -454,6 +455,7 @@ class Beneficiary(Person):
     account_number = models.IntegerField(blank=True, null=True)
     email = models.EmailField(blank=True, null=True)
     country = models.CharField(max_length=2)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return "Beneficiary: %s" % (self.name)
@@ -505,27 +507,11 @@ class OperatingAccount(EditableModel):
 
 class ExchangeRate(models.Model):
     currency_from = models.CharField(choices=Currency.choices, max_length=10)
-class OperatingAccount(EditableModel):
-    class Type(models.IntegerChoices):
-        BANK = 1
-class ExchangeRate(models.Model):
-    class Type(models.IntegerChoices):
-        BANK = 1
-        MOBILE_PAYMENT = 2
-        CRYPTO = 3
-        CASH = 4
-
-    currency_from = models.CharField(choices=Currency.choices, max_length=10)
     currency_to = models.CharField(choices=Currency.choices, max_length=10)
     rate = models.DecimalField(max_digits=20, decimal_places=8)
     low_amount = models.DecimalField(max_digits=20, decimal_places=2, default=0)
     low_amount_limit = models.DecimalField(max_digits=20, decimal_places=2, default=0)
-
-    name = models.CharField(max_length=20, null=True, blank=True)
-    type = models.IntegerField(choices=Type.choices)
-    currency = models.CharField(choices=Currency.choices, max_length=5)
-    # Remove office field to avoid clash with EditableModel
-    # balance = models.DecimalField(max_digits=20, decimal_places=8, default=0)
+    
     def __str__(self) -> str:
         return "%s to %s @%.2f" % (self.currency_from, self.currency_to, self.rate)
 
@@ -582,8 +568,8 @@ class BankTransfer(models.Model):
     bank = models.CharField(max_length=255)
     account_number = models.CharField(max_length=50)
     account_name = models.CharField(max_length=255)
-    narration = models.TextField()
-    created_at = models.DateTimeField(auto_now_add=True)
+    # narration = models.TextField()
+    # created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"{self.bank} - {self.account_number} - {self.account_name}"
@@ -646,8 +632,48 @@ class DocumentStatus(models.TextChoices):
     REJECTED = "REJECTED", "Rejected"
 
 
-class KYC(models.Model):
+class KYCDocument(models.Model):
     COUNTRY_CHOICES = [("NG", "Nigeria"), ("UG", "Uganda")]
+    # Define Nigerian states choices
+    NIGERIAN_STATES = [
+        ("ABIA", "Abia"),
+        ("ADAMAWA", "Adamawa"),
+        ("AKWA_IBOM", "Akwa Ibom"),
+        ("ANAMBRA", "Anambra"),
+        ("BAUCHI", "Bauchi"),
+        ("BAYELSA", "Bayelsa"),
+        ("BENUE", "Benue"),
+        ("BORNO", "Borno"),
+        ("CROSS_RIVER", "Cross River"),
+        ("DELTA", "Delta"),
+        ("EBONYI", "Ebonyi"),
+        ("EDO", "Edo"),
+        ("EKITI", "Ekiti"),
+        ("ENUGU", "Enugu"),
+        ("FCT", "Federal Capital Territory"),
+        ("GOMBE", "Gombe"),
+        ("IMO", "Imo"),
+        ("JIGAWA", "Jigawa"),
+        ("KADUNA", "Kaduna"),
+        ("KANO", "Kano"),
+        ("KATSINA", "Katsina"),
+        ("KEBBI", "Kebbi"),
+        ("KOGI", "Kogi"),
+        ("KWARA", "Kwara"),
+        ("LAGOS", "Lagos"),
+        ("NASSARAWA", "Nassarawa"),
+        ("NIGER", "Niger"),
+        ("OGUN", "Ogun"),
+        ("ONDO", "Ondo"),
+        ("OSUN", "Osun"),
+        ("OYO", "Oyo"),
+        ("PLATEAU", "Plateau"),
+        ("RIVERS", "Rivers"),
+        ("SOKOTO", "Sokoto"),
+        ("TARABA", "Taraba"),
+        ("YOBE", "Yobe"),
+        ("ZAMFARA", "Zamfara"),
+    ]
     DOC_TYPES = [
         ("NIN", "National ID Number"),
         ("DL", "DriversLicence"),
@@ -660,19 +686,30 @@ class KYC(models.Model):
         ('approved', 'Approved'),
         ('rejected', 'Rejected'),
     ]
-    
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="kyc")
-    country = models.CharField(max_length=2, choices=COUNTRY_CHOICES, default='NG')
-    doc_type = models.CharField(max_length=20, choices=DOC_TYPES, default='NIN')
-    doc_number = models.CharField(max_length=50, unique=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
-    submitted_at = models.DateTimeField(auto_now_add=True)
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="kyc", blank=True, null=True)
+    country = models.CharField(max_length=2, choices=COUNTRY_CHOICES, default='NG', blank=True, null=True)
+    doc_type = models.CharField(max_length=20, choices=DOC_TYPES, default='NIN', blank=True, null=True)
+    doc_number = models.CharField(max_length=50, unique=True, blank=True, null=True)
+    first_name = models.CharField(max_length=100, blank=True,null=True)
+    last_name = models.CharField(max_length=100, blank=True,null=True)
+    date_of_birth = models.DateField(blank=True,null=True)
+    state = models.CharField(max_length=50, choices=NIGERIAN_STATES, blank=True,null=True)  # Added state field
+
+    # Preliminary response data
+    verification_id = models.CharField(max_length=255, blank=True,null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', blank=True, null=True)
+    submitted_at = models.DateTimeField(auto_now_add=True,blank=True, null=True)
+    raw_response = models.JSONField(default=dict, blank=True, null=True)  # Store raw response from verification service
     reviewed_at = models.DateTimeField(null=True, blank=True)
     reviewed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='kyc_reviews')
     reviewer_notes = models.TextField(null=True, blank=True)
 
+    class Meta:
+        unique_together = ['user', 'doc_type', 'country']
+    
     def __str__(self):
-        return f"KYC for {self.user.username} - {self.status}"
+        return f"{self.user.email} - {self.get_document_type_display()} ({self.country})"
 
 
 def get_kyc_upload_path(instance, filename):
@@ -689,25 +726,6 @@ class IdentityDocumentType(models.TextChoices):
     DRIVER_LICENSE = "DRIVER_LICENSE", "Driver License"
 
 
-class IdentityDocument(models.Model):
-    kyc = models.ForeignKey(KYC, on_delete=models.CASCADE, related_name="documents")
-    document_type = models.CharField(
-        max_length=50,
-        choices=IdentityDocumentType.choices,
-    )
-    document_file = models.FileField(
-        upload_to=get_kyc_upload_path, blank=True, null=True
-    )
-    uploaded_at = models.DateTimeField(auto_now_add=True)
-    document_number = models.CharField(max_length=50, null=True, blank=True)
-    status = models.CharField(
-        max_length=20,
-        choices=DocumentStatus.choices,
-        default=DocumentStatus.PENDING,
-    )
-
-    def __str__(self):
-        return f"{self.document_type} for {self.kyc.user.username}"
 
 
 class Request(models.Model):
@@ -802,6 +820,7 @@ class Transaction(models.Model):
     transaction_id = models.CharField(max_length=32, unique=True, db_index=True)
     
     # User who initiated the transaction
+    from django.conf import settings
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, 
         on_delete=models.CASCADE, 
@@ -867,7 +886,7 @@ class Transaction(models.Model):
         blank=True
     )
     kyc_reference = models.ForeignKey(
-        'KYC', 
+        'KYCDocument', 
         on_delete=models.SET_NULL, 
         null=True, 
         blank=True

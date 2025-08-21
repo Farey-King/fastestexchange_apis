@@ -22,7 +22,7 @@ from .models import (
     PhoneNumber,
     SwapEngine,
     SavedBeneficiary,
-    KYC,  # Assuming KYC is a model you have defined
+    KYCDocument,  # Assuming KYC is a model you have defined
     
     # Transaction Engine models
     Transaction,
@@ -156,9 +156,9 @@ admin.site.register(CreatePin)
 admin.site.register(Login)
 admin.site.register(PhoneNumber)
 admin.site.register(SavedBeneficiary)
-admin.site.register(KYC)
+admin.site.register(KYCDocument)
 admin.site.register(User, GandariaUserAdmin)  # Register the custom user admin
-admin.site.register(EditableModel)
+# admin.site.register(EditableModel)
 # admin.site.register(User)
 # admin.site.register(SwapEngine)
 @admin.register(SwapEngine)

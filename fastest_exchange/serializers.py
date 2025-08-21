@@ -17,7 +17,7 @@ from django.utils import timezone
 from datetime import timedelta
 import random
 import string
-
+from .services.prembly_client import PremblyClient
 
 from .models import (
     TransactionHistory,
@@ -38,7 +38,7 @@ from .models import (
     MobileMoney,
     ReceiveCash,
     SavedBeneficiary,
-    KYC,
+    KYCDocument,
     
     # Transaction Engine models
     Transaction,
@@ -290,12 +290,86 @@ class SavedBeneficiarySerializer(serializers.ModelSerializer):
             validated_data["beneficiary_account_number"] = beneficiary.account_number
             validated_data["beneficiary_currency"] = beneficiary.currency
 
-class KYCSerializer(serializers.ModelSerializer):
+class KYCDocumentSerializer(serializers.ModelSerializer):
     class Meta:
-        model = KYC
+        model = KYCDocument
         fields = "__all__"
-        read_only_fields = ["status", "submitted_at", "reviewed_at", "reviewed_by"]
+        read_only_fields = ["status","document_number", "doc_type","submitted_at", "reviewed_at", "reviewed_by"]
+    def validate(self, data):
+        country = data.get('country')
+        document_type = data.get('document_type')
+        
+        # Validate UGX documents (only NIN allowed)
+        if country == 'UGX' and document_type != 'NIN':
+            raise serializers.ValidationError(
+                "For Uganda (UGX), only National Identification Number (NIN) is supported"
+            )
+        
+        # Validate required fields based on document type
+        if document_type == 'DL' and not data.get('date_of_birth'):
+            raise serializers.ValidationError(
+                "Date of birth is required for Driver's License verification"
+            )
+        
+        return data
+
+class KYCVerificationSerializer(serializers.Serializer):
+    document_type = serializers.ChoiceField(choices=KYCDocument.DOC_TYPES)
+    country = serializers.ChoiceField(choices=KYCDocument.COUNTRY_CHOICES)
+    document_number = serializers.CharField(max_length=100)
+    first_name = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    last_name = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    date_of_birth = serializers.DateField(required=False, allow_null=True)
     
+    def verify(self):
+        data = self.validated_data
+        prembly = PremblyClient()
+        
+        country = data['country']
+        document_type = data['document_type']
+        document_number = data['document_number']
+        
+        try:
+            if country == 'UGX' and document_type == 'NIN':
+                response = prembly.verify_ugx_nin(
+                    document_number,
+                    data.get('first_name'),
+                    data.get('last_name')
+                )
+            
+            elif country == 'NGN':
+                if document_type == 'NIN':
+                    response = prembly.verify_ngn_nin(document_number)
+                
+                elif document_type == 'DL':
+                    response = prembly.verify_ngn_drivers_license(
+                        document_number,
+                        data.get('date_of_birth')
+                    )
+                
+                elif document_type == 'PASSPORT':
+                    response = prembly.verify_ngn_international_passport(
+                        document_number,
+                        data.get('first_name'),
+                        data.get('last_name')
+                    )
+                
+                elif document_type == 'VOTER':
+                    response = prembly.verify_ngn_voters_card(
+                        document_number,
+                        last_name=data.get('last_name')
+                    )
+                
+                else:
+                    raise serializers.ValidationError("Unsupported document type for NGN")
+            
+            else:
+                raise serializers.ValidationError("Unsupported country/document combination")
+            
+            return response
+            
+        except Exception as e:
+            raise serializers.ValidationError(f"Verification failed: {str(e)}") 
 class ExchangeRateSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExchangeRate

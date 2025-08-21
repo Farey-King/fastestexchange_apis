@@ -5,6 +5,7 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView,
     TokenVerifyView
 )
+from rest_framework.routers import DefaultRouter
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView,SpectacularRedocView
 
 from fastest_exchange.views import (
@@ -18,8 +19,8 @@ from fastest_exchange.views import (
                                     SwapView,
                                     ManualVerifyView,
                                     SavedBeneficiaryView,
-                                    KYCSubmissionView,
-                                    
+                                    KYCViewSet,
+
                                     # Transaction Engine views
                                     TransactionCreateView,
                                     TransactionListView,
@@ -47,6 +48,7 @@ from fastest_exchange.exchange_rate_views import (
 app_name = "expense_tracker"
 # Routers provide an easy way of automatically determining the URL conf.
 router = routers.DefaultRouter(trailing_slash=False)
+router.register(r'kyc', KYCViewSet, basename='kyc')
 router.include_root_view = True
 
 urlpatterns = [
