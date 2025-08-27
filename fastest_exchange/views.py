@@ -947,14 +947,6 @@ class AuthTokenView(ObtainAuthToken):
         return Response({"token": token.key, "user": user})
 
 
-
-
-
-
-
-
-
-
 class MyTokenObtainPairView(TokenObtainPairView):
     permission_classes = [AllowAny]
     serializer_class = MyTokenObtainPairSerializer

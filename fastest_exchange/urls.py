@@ -103,11 +103,7 @@ urlpatterns = [
     # Auth Token generation
     path("api/", include("rest_framework.urls", namespace="rest_framework")),
     path("api/", include(router.urls)),
-    # path(
-    #     "api/auth/token",
-    #     views.MyTokenObtainPairView.as_view(),
-    #     name="token_obtain_pair",
-    # ),
+    
     path("api/auth/token/refresh", TokenRefreshView.as_view(), name="token_refresh"),
     path("api/auth/token/verify", TokenVerifyView.as_view(), name="token_verify"),
     path("api/auth/token/blacklist", TokenBlacklistView.as_view(), name="token_blacklist"),

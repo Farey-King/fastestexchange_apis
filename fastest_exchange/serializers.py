@@ -314,9 +314,9 @@ class KYCDocumentSerializer(serializers.ModelSerializer):
         return data
 
 class KYCVerificationSerializer(serializers.Serializer):
-    document_type = serializers.ChoiceField(choices=KYCDocument.DOC_TYPES)
+    doc_type = serializers.ChoiceField(choices=KYCDocument.DOC_TYPES)
     country = serializers.ChoiceField(choices=KYCDocument.COUNTRY_CHOICES)
-    document_number = serializers.CharField(max_length=100)
+    doc_number = serializers.CharField(max_length=100)
     first_name = serializers.CharField(max_length=100, required=False, allow_blank=True)
     last_name = serializers.CharField(max_length=100, required=False, allow_blank=True)
     date_of_birth = serializers.DateField(required=False, allow_null=True)
@@ -326,37 +326,37 @@ class KYCVerificationSerializer(serializers.Serializer):
         prembly = PremblyClient()
         
         country = data['country']
-        document_type = data['document_type']
-        document_number = data['document_number']
-        
+        doc_type = data['doc_type']
+        doc_number = data['doc_number']
+
         try:
-            if country == 'UGX' and document_type == 'NIN':
+            if country == 'UGX' and doc_type == 'NIN':
                 response = prembly.verify_ugx_nin(
-                    document_number,
+                    doc_number,
                     data.get('first_name'),
                     data.get('last_name')
                 )
             
             elif country == 'NGN':
-                if document_type == 'NIN':
-                    response = prembly.verify_ngn_nin(document_number)
-                
-                elif document_type == 'DL':
+                if doc_type == 'NIN':
+                    response = prembly.verify_ngn_nin(doc_number)
+
+                elif doc_type == 'DL':
                     response = prembly.verify_ngn_drivers_license(
-                        document_number,
+                        doc_number,
                         data.get('date_of_birth')
                     )
-                
-                elif document_type == 'PASSPORT':
+
+                elif doc_type == 'PASSPORT':
                     response = prembly.verify_ngn_international_passport(
-                        document_number,
+                        doc_number,
                         data.get('first_name'),
                         data.get('last_name')
                     )
-                
-                elif document_type == 'VOTER':
+
+                elif doc_type == 'VOTER':
                     response = prembly.verify_ngn_voters_card(
-                        document_number,
+                        doc_number,
                         last_name=data.get('last_name')
                     )
                 

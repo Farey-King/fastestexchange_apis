@@ -687,7 +687,7 @@ class KYCDocument(models.Model):
         ('rejected', 'Rejected'),
     ]
 
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="kyc", blank=True, null=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="kyc")
     country = models.CharField(max_length=2, choices=COUNTRY_CHOICES, default='NG', blank=True, null=True)
     doc_type = models.CharField(max_length=20, choices=DOC_TYPES, default='NIN', blank=True, null=True)
     doc_number = models.CharField(max_length=50, unique=True, blank=True, null=True)
@@ -708,8 +708,8 @@ class KYCDocument(models.Model):
     class Meta:
         unique_together = ['user', 'doc_type', 'country']
     
-    def __str__(self):
-        return f"{self.user.email} - {self.get_document_type_display()} ({self.country})"
+    # def __str__(self):
+    #     return f"{self.user.email} - {self.doc_type()} ({self.country})"
 
 
 def get_kyc_upload_path(instance, filename):

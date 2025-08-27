@@ -6,9 +6,9 @@ from urllib.parse import urljoin
 
 class PremblyClient:
     def __init__(self):
-        self.base_url = getattr(settings, 'PREMBLY_BASE_URL', 'https://api.prembly.com')
-        self.app_id = getattr(settings, 'PREMBLY_APP_ID')
-        self.api_key = getattr(settings, 'PREMBLY_X_API_KEY')
+        self.base_url = os.getenv('PREMBLY_BASE_URL', 'https://api.prembly.com')
+        self.app_id = os.getenv('PREMBLY_APP_ID')
+        self.api_key = os.getenv('PREMBLY_API_KEY')
         self.headers = {
             'x-api-key': self.api_key,
             'app_id': self.app_id,
@@ -26,7 +26,8 @@ class PremblyClient:
     
     def verify_ugx_nin(self, nin_number, first_name=None, last_name=None):
         """Verify UGX (Uganda) National Identification Number"""
-        endpoint = '/identitypass/verification/ug/nin'
+        endpoint = '/verification/ug/nin-verification'
+                        
         data = {
             'number': nin_number
         }
@@ -40,7 +41,7 @@ class PremblyClient:
     
     def verify_ngn_nin(self, nin_number):
         """Verify NGN (Nigeria) National Identification Number"""
-        endpoint = '/identitypass/verification/ng/nin'
+        endpoint = '/identitypass/verification/vnin-basic'
         data = {
             'number': nin_number
         }
@@ -48,7 +49,7 @@ class PremblyClient:
     
     def verify_ngn_drivers_license(self, license_number, dob=None):
         """Verify NGN Driver's License"""
-        endpoint = '/identitypass/verification/ng/drivers_license'
+        endpoint = '/identitypass/verification/drivers_license'
         data = {
             'license_number': license_number
         }
@@ -60,7 +61,7 @@ class PremblyClient:
     
     def verify_ngn_international_passport(self, passport_number, first_name=None, last_name=None):
         """Verify NGN International Passport"""
-        endpoint = '/identitypass/verification/ng/passport'
+        endpoint = '/identitypass/verification/national_passport'
         data = {
             'number': passport_number
         }
@@ -77,7 +78,7 @@ class PremblyClient:
         Verify NGN Voter's Card
         state parameter is REQUIRED for voter card verification
         """
-        endpoint = '/identitypass/verification/ng/voters_card'
+        endpoint = '/identitypass/verification/voters_card'
         data = {
             'voters_id': voters_id,
             'state': state  # This is required
